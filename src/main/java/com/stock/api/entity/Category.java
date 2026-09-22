@@ -22,7 +22,12 @@ public class Category {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 100)
+    /**
+     * Unicité du nom portée par un index partiel (lignes actives uniquement,
+     * RG-04) créé au démarrage par DataInitializer — voir la remarque sur
+     * Product.name.
+     */
+    @Column(nullable = false, length = 100)
     private String name;
 
     @Column(length = 500)

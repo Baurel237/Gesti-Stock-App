@@ -3,6 +3,7 @@ package com.stock.api.security;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
@@ -19,7 +20,12 @@ import java.util.function.Function;
 @Service
 public class JwtService {
 
-    @Value("${jwt.secret:Z3VpeGJ1ZmYtc2VjcmV0LWtleS1mb3Itc3RvY2stYXBpLTIwMjYtdmVyeS1sb25nLXNlY3JldC1rZXk=}")
+    /**
+     * Secret de signature JWT (Base64) — OBLIGATOIRE, sans valeur par défaut :
+     * l'application refuse de démarrer sans la variable d'environnement JWT_SECRET
+     * (voir .env.example). Jamais de clé codée en dur dans le code.
+     */
+    @Value("${jwt.secret}")
     private String secretKey;
 
     @Value("${jwt.expiration:86400000}") // 24h par défaut
@@ -27,6 +33,20 @@ public class JwtService {
 
     @Value("${jwt.refresh-expiration:604800000}") // 7 jours par défaut
     private long refreshExpiration;
+
+    /**
+     * Valide le secret au démarrage : HS256 exige au moins 32 octets (256 bits).
+     * Échoue avec un message clair plutôt qu'à la première signature.
+     */
+    @PostConstruct
+    void validateSecret() {
+        byte[] keyBytes = Decoders.BASE64.decode(secretKey);
+        if (keyBytes.length < 32) {
+            throw new IllegalStateException(
+                    "jwt.secret invalide : la clé signée HS256 doit faire au moins 32 octets "
+                            + "(générez-en une avec : openssl rand -base64 48)");
+        }
+    }
 
     /**
      * Génère un JWT pour un utilisateur donné.

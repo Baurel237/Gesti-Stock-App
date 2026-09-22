@@ -14,6 +14,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -60,6 +61,7 @@ public class OrderController {
      * US-09 : Création d'une commande multi-lignes.
      */
     @PostMapping
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER')")
     @Operation(summary = "Créer une commande",
                description = "Crée une nouvelle commande avec une ou plusieurs lignes. " +
                        "Le montant total est calculé automatiquement.")
@@ -83,6 +85,7 @@ public class OrderController {
                        "RG-02 : rejet si stock insuffisant.")
     @ApiResponse(responseCode = "200", description = "Commande validée")
     @ApiResponse(responseCode = "409", description = "Statut invalide ou stock insuffisant")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER')")
     public ResponseEntity<OrderResponse> validate(
             @Parameter(description = "ID de la commande") @PathVariable Long id,
             Authentication authentication) {
@@ -98,6 +101,7 @@ public class OrderController {
                description = "Annule une commande en attente")
     @ApiResponse(responseCode = "200", description = "Commande annulée")
     @ApiResponse(responseCode = "409", description = "Statut invalide")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER')")
     public ResponseEntity<OrderResponse> cancel(
             @Parameter(description = "ID de la commande") @PathVariable Long id,
             Authentication authentication) {

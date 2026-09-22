@@ -23,6 +23,7 @@ public class OrderResponse {
     private List<OrderLineResponse> lines;
     private Long createdById;
     private String createdByEmail;
+    private String createdByName;
     private String notes;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

@@ -2,6 +2,7 @@ package com.stock.api.service;
 
 import com.stock.api.dto.StockMovementRequest;
 import com.stock.api.dto.StockMovementResponse;
+import com.stock.api.dto.StockMovementTotalsResponse;
 import com.stock.api.entity.Product;
 import com.stock.api.entity.StockMovement;
 import com.stock.api.entity.StockMovement.MovementType;
@@ -15,6 +16,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.persistence.criteria.Predicate;
+import org.springframework.data.jpa.domain.Specification;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
@@ -46,8 +50,23 @@ public class StockMovementService {
     public Page<StockMovementResponse> findByFilters(Long productId, MovementType type,
                                                       LocalDateTime fromDate, LocalDateTime toDate,
                                                       Pageable pageable) {
-        return stockMovementRepository.findByFilters(productId, type, fromDate, toDate, pageable)
-                .map(this::toResponse);
+        Specification<StockMovement> spec = (root, query, cb) -> {
+            java.util.List<Predicate> predicates = new java.util.ArrayList<>();
+            if (productId != null) {
+                predicates.add(cb.equal(root.get("product").get("id"), productId));
+            }
+            if (type != null) {
+                predicates.add(cb.equal(root.get("type"), type));
+            }
+            if (fromDate != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), fromDate));
+            }
+            if (toDate != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("createdAt"), toDate));
+            }
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+        return stockMovementRepository.findAll(spec, pageable).map(this::toResponse);
     }
 
     /**
@@ -101,6 +120,35 @@ public class StockMovementService {
         productRepository.save(product);
 
         return toResponse(movement);
+    }
+
+    @Transactional(readOnly = true)
+    public StockMovementTotalsResponse getTotals() {
+        long entryCount = 0;
+        long exitCount = 0;
+        BigDecimal entryAmount = BigDecimal.ZERO;
+        BigDecimal exitAmount = BigDecimal.ZERO;
+
+        for (Object[] row : stockMovementRepository.getTotalsByType()) {
+            String type = (String) row[0];
+            BigDecimal amount = row[1] != null ? new BigDecimal(row[1].toString()) : BigDecimal.ZERO;
+            long count = row[2] != null ? ((Number) row[2]).longValue() : 0;
+
+            if ("ENTRY".equals(type)) {
+                entryAmount = amount;
+                entryCount = count;
+            } else if ("EXIT".equals(type)) {
+                exitAmount = amount;
+                exitCount = count;
+            }
+        }
+
+        return StockMovementTotalsResponse.builder()
+                .totalEntryAmount(entryAmount)
+                .totalExitAmount(exitAmount)
+                .totalEntryCount(entryCount)
+                .totalExitCount(exitCount)
+                .build();
     }
 
     private StockMovementResponse toResponse(StockMovement movement) {

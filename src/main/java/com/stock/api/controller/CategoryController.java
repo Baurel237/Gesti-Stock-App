@@ -13,6 +13,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -59,6 +60,7 @@ public class CategoryController {
     @ApiResponse(responseCode = "201", description = "Catégorie créée avec succès")
     @ApiResponse(responseCode = "400", description = "Données invalides")
     @ApiResponse(responseCode = "409", description = "Nom de catégorie déjà utilisé")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER')")
     public ResponseEntity<CategoryResponse> create(@Valid @RequestBody CategoryRequest request) {
         CategoryResponse response = categoryService.create(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -73,6 +75,7 @@ public class CategoryController {
     @ApiResponse(responseCode = "200", description = "Catégorie mise à jour")
     @ApiResponse(responseCode = "404", description = "Catégorie non trouvée")
     @ApiResponse(responseCode = "409", description = "Nom de catégorie déjà utilisé")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER')")
     public ResponseEntity<CategoryResponse> update(
             @Parameter(description = "ID de la catégorie") @PathVariable Long id,
             @Valid @RequestBody CategoryRequest request) {
@@ -88,6 +91,7 @@ public class CategoryController {
     @ApiResponse(responseCode = "204", description = "Catégorie supprimée")
     @ApiResponse(responseCode = "404", description = "Catégorie non trouvée")
     @ApiResponse(responseCode = "409", description = "Des produits sont encore rattachés")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
     public ResponseEntity<Void> delete(
             @Parameter(description = "ID de la catégorie") @PathVariable Long id) {
         categoryService.delete(id);

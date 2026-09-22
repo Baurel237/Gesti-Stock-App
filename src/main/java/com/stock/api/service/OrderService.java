@@ -111,7 +111,9 @@ public class OrderService {
 
     /**
      * US-10 : Validation d'une commande.
-     * Déclenche les mouvements de sortie de stock pour chaque ligne.
+     * Déclenche les mouvements de SORTIE de stock pour chaque ligne
+     * (la validation confirme la sortie des marchandises).
+     * RG-02 : rejet si le stock est insuffisant pour une ligne.
      */
     @Transactional
     public OrderResponse validate(Long id, String userEmail) {
@@ -120,7 +122,8 @@ public class OrderService {
 
         if (order.getStatus() != OrderStatus.PENDING) {
             throw new IllegalStateException(
-                    String.format("La commande '%s' ne peut pas être validée (statut: %s)",
+                    String.format("La commande '%s' ne peut pas être validée (statut: %s). "
+                                    + "Seule une commande en attente peut être validée.",
                             order.getReference(), order.getStatus()));
         }
 
@@ -128,20 +131,18 @@ public class OrderService {
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Utilisateur non trouvé avec l'email: " + userEmail));
 
-        // Vérifier la disponibilité du stock pour toutes les lignes
+        // Créer les mouvements de sortie de stock pour chaque ligne
         for (OrderLine line : order.getLines()) {
             Product product = line.getProduct();
+
+            // RG-02 : rejet si stock insuffisant pour cette ligne
             if (!product.canRemoveQuantity(line.getQuantity())) {
                 throw new IllegalStateException(
-                        String.format("Stock insuffisant pour le produit '%s'. " +
-                                "Disponible: %d, Demandé: %d",
-                                product.getName(), product.getQuantity(), line.getQuantity()));
+                        String.format("Stock insuffisant pour le produit '%s' (réf. %s). "
+                                        + "Disponible : %d unité(s), demandé : %d unité(s).",
+                                product.getName(), product.getReference(),
+                                product.getQuantity(), line.getQuantity()));
             }
-        }
-
-        // Créer les mouvements de sortie de stock
-        for (OrderLine line : order.getLines()) {
-            Product product = line.getProduct();
 
             StockMovement movement = StockMovement.builder()
                     .type(StockMovement.MovementType.EXIT)
@@ -154,7 +155,7 @@ public class OrderService {
 
             stockMovementRepository.save(movement);
 
-            // Mettre à jour la quantité du produit
+            // RG-01 : décrémenter la quantité du produit (jamais négative)
             product.removeQuantity(line.getQuantity());
             productRepository.save(product);
         }
@@ -169,7 +170,8 @@ public class OrderService {
     /**
      * US-09 : Annulation d'une commande.
      * - PENDING → CANCELLED (simple annulation)
-     * - VALIDATED → CANCELLED (annulation avec restitution du stock)
+     * - VALIDATED → CANCELLED (annulation avec RESTITUTION du stock :
+     *   les quantités sorties à la validation sont remises en stock)
      * - CANCELLED → error (déjà annulée)
      */
     @Transactional
@@ -187,7 +189,7 @@ public class OrderService {
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Utilisateur non trouvé avec l'email: " + userEmail));
 
-        // Si la commande était validée, restituer le stock
+        // Si la commande était validée, restituer le stock (annulation des sorties)
         if (order.getStatus() == OrderStatus.VALIDATED) {
             for (OrderLine line : order.getLines()) {
                 Product product = line.getProduct();
@@ -244,6 +246,7 @@ public class OrderService {
                 .lines(lineResponses)
                 .createdById(order.getCreatedBy().getId())
                 .createdByEmail(order.getCreatedBy().getEmail())
+                .createdByName(order.getCreatedBy().getFirstName() + " " + order.getCreatedBy().getLastName())
                 .notes(order.getNotes())
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())

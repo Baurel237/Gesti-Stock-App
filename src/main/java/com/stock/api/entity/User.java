@@ -48,7 +48,15 @@ public class User {
     private Set<Role> roles = new HashSet<>();
 
     @Column(nullable = false)
+    @Builder.Default
     private boolean active = true;
+
+    /**
+     * Devise d'affichage choisie par l'utilisateur (ISO 4217).
+     * Null = suivre la devise globale des paramètres de l'application.
+     */
+    @Column(length = 3)
+    private String preferredCurrency;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

@@ -29,17 +29,16 @@ public class OpenApiConfig {
                                 API REST de gestion de stock.
 
                                 ## Fonctionnalités
-                                - **Authentification** : inscription, connexion, JWT
+                                - **Authentification** : connexion, JWT (comptes créés par l'administration)
                                 - **Catégories** : CRUD avec suppression logique (RG-04)
                                 - **Produits** : CRUD, recherche/filtrage, alerte stock bas
                                 - **Stock** : entrées/sorties, historique filtrable, RG-02
                                 - **Commandes** : création multi-lignes, validation avec déclenchement stock
 
                                 ## Authentification
-                                1. Inscrivez-vous via `POST /api/auth/register`
-                                2. Connectez-vous via `POST /api/auth/login`
-                                3. Copiez le token JWT retourné
-                                4. Cliquez sur **Authorize** ci-dessous et collez le token
+                                1. Connectez-vous via `POST /api/auth/login`
+                                2. Copiez le token JWT retourné
+                                3. Cliquez sur **Authorize** ci-dessous et collez le token
 
                                 ## Règles de gestion
                                 - **RG-01** : Quantité en stock jamais négative

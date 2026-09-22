@@ -10,7 +10,9 @@ services:
     environment:
       POSTGRES_DB: stock_db
       POSTGRES_USER: stock_user
-      POSTGRES_PASSWORD: stock_password
+      # docker compose charge automatiquement le fichier .env du répertoire :
+      # copiez .env.example vers .env et renseignez POSTGRES_PASSWORD.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant — copiez .env.example vers .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

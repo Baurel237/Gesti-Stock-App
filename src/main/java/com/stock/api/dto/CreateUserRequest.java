@@ -14,7 +14,7 @@ import java.util.Set;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class RegisterRequest {
+public class CreateUserRequest {
 
     @NotBlank(message = "L'email est obligatoire")
     @Email(message = "L'email doit être valide")
@@ -25,15 +25,13 @@ public class RegisterRequest {
     private String password;
 
     @NotBlank(message = "Le prénom est obligatoire")
-    @Size(max = 100, message = "Le prénom ne doit pas dépasser 100 caractères")
+    @Size(max = 100)
     private String firstName;
 
     @NotBlank(message = "Le nom est obligatoire")
-    @Size(max = 100, message = "Le nom ne doit pas dépasser 100 caractères")
+    @Size(max = 100)
     private String lastName;
 
-    /**
-     * RG-05 : au moins un rôle doit être fourni.
-     */
+    /** RG-05 : au moins un rôle doit être fourni. */
     private Set<String> roles;
 }

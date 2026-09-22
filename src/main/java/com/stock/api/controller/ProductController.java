@@ -13,6 +13,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -74,6 +75,7 @@ public class ProductController {
     @ApiResponse(responseCode = "201", description = "Produit créé avec succès")
     @ApiResponse(responseCode = "400", description = "Données invalides")
     @ApiResponse(responseCode = "409", description = "Nom ou référence déjà utilisé")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER')")
     public ResponseEntity<ProductResponse> create(@Valid @RequestBody ProductRequest request) {
         ProductResponse response = productService.create(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -88,6 +90,7 @@ public class ProductController {
     @ApiResponse(responseCode = "200", description = "Produit mis à jour")
     @ApiResponse(responseCode = "404", description = "Produit non trouvé")
     @ApiResponse(responseCode = "409", description = "Nom ou référence déjà utilisé")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER')")
     public ResponseEntity<ProductResponse> update(
             @Parameter(description = "ID du produit") @PathVariable Long id,
             @Valid @RequestBody ProductRequest request) {
@@ -102,6 +105,7 @@ public class ProductController {
                description = "Supprime logiquement un produit (RG-04)")
     @ApiResponse(responseCode = "204", description = "Produit supprimé")
     @ApiResponse(responseCode = "404", description = "Produit non trouvé")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
     public ResponseEntity<Void> delete(
             @Parameter(description = "ID du produit") @PathVariable Long id) {
         productService.delete(id);

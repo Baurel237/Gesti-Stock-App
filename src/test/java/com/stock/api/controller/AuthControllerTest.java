@@ -2,7 +2,6 @@ package com.stock.api.controller;
 
 import com.stock.api.dto.AuthResponse;
 import com.stock.api.dto.LoginRequest;
-import com.stock.api.dto.RegisterRequest;
 import com.stock.api.service.AuthService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -32,19 +31,11 @@ class AuthControllerTest {
     @InjectMocks
     private AuthController authController;
 
-    private RegisterRequest validRegisterRequest;
     private LoginRequest validLoginRequest;
     private AuthResponse authResponse;
 
     @BeforeEach
     void setUp() {
-        validRegisterRequest = RegisterRequest.builder()
-                .email("test@example.com")
-                .password("password123")
-                .firstName("Jean")
-                .lastName("Dupont")
-                .build();
-
         validLoginRequest = LoginRequest.builder()
                 .email("test@example.com")
                 .password("password123")
@@ -59,48 +50,6 @@ class AuthControllerTest {
                 .lastName("Dupont")
                 .roles(Set.of("USER"))
                 .build();
-    }
-
-    // ═══════════════════════════════════════════════════════
-    // US-01 : Inscription
-    // ═══════════════════════════════════════════════════════
-    @Nested
-    @DisplayName("register() — Inscription")
-    class RegisterTests {
-
-        @Test
-        @DisplayName("Inscription réussie → 201 + JWT")
-        void register_success() {
-            when(authService.register(any(RegisterRequest.class)))
-                    .thenReturn(authResponse);
-
-            var response = authController.register(validRegisterRequest);
-
-            assertEquals(201, response.getStatusCode().value());
-            assertNotNull(response.getBody());
-            assertEquals("jwt-token-123", response.getBody().getToken());
-            assertEquals("test@example.com", response.getBody().getEmail());
-        }
-
-        @Test
-        @DisplayName("Email déjà utilisé → exception propagée")
-        void register_duplicateEmail() {
-            when(authService.register(any(RegisterRequest.class)))
-                    .thenThrow(new IllegalStateException("Un compte avec cet email existe déjà"));
-
-            assertThrows(IllegalStateException.class,
-                    () -> authController.register(validRegisterRequest));
-        }
-
-        @Test
-        @DisplayName("Données invalides → exception propagée")
-        void register_invalidData() {
-            when(authService.register(any(RegisterRequest.class)))
-                    .thenThrow(new IllegalArgumentException("Données invalides"));
-
-            assertThrows(IllegalArgumentException.class,
-                    () -> authController.register(validRegisterRequest));
-        }
     }
 
     // ═══════════════════════════════════════════════════════
@@ -158,17 +107,6 @@ class AuthControllerTest {
     @Nested
     @DisplayName("Interaction avec AuthService")
     class InteractionTests {
-
-        @Test
-        @DisplayName("register() appelle bien authService.register()")
-        void register_callsService() {
-            when(authService.register(any(RegisterRequest.class)))
-                    .thenReturn(authResponse);
-
-            authController.register(validRegisterRequest);
-
-            verify(authService).register(validRegisterRequest);
-        }
 
         @Test
         @DisplayName("login() appelle bien authService.login()")

@@ -25,7 +25,13 @@ public class Product {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 100)
+    /**
+     * Unicité du nom portée par un index partiel (lignes actives uniquement,
+     * RG-04) créé au démarrage par DataInitializer. Une contrainte UNIQUE
+     * globale bloquerait la recréation d'un produit au nom d'un produit
+     * soft-deleted.
+     */
+    @Column(nullable = false, length = 100)
     private String name;
 
     @Column(length = 500)

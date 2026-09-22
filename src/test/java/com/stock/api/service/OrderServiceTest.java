@@ -217,6 +217,90 @@ class OrderServiceTest {
         }
 
         @Test
+        @DisplayName("RG-02 : même produit dans 2 lignes, total > stock → rejet")
+        void validate_sameProductTwoLines_exceedsStock_throwsException() {
+            Order order = Order.builder()
+                    .id(1L)
+                    .reference("CMD-RG02")
+                    .status(OrderStatus.PENDING)
+                    .createdBy(user)
+                    .build();
+
+            // 2 lignes pour le même produit (qty=10), chacune demande 6
+            // Total = 12 > 10 disponibles → doit être rejeté
+            // La ligne 1 passe (10 >= 6) mais la ligne 2 échoue (4 < 6)
+            var line1 = new com.stock.api.entity.OrderLine();
+            line1.setProduct(product);
+            line1.setQuantity(6);
+            line1.setUnitPrice(BigDecimal.valueOf(29.99));
+            line1.setSubtotal(BigDecimal.valueOf(179.94));
+
+            var line2 = new com.stock.api.entity.OrderLine();
+            line2.setProduct(product); // Même instance JPA = même produit
+            line2.setQuantity(6);
+            line2.setUnitPrice(BigDecimal.valueOf(29.99));
+            line2.setSubtotal(BigDecimal.valueOf(179.94));
+
+            order.setLines(List.of(line1, line2));
+
+            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+            when(userRepository.findByEmail("user@test.com")).thenReturn(Optional.of(user));
+            when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(productRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            IllegalStateException exception = assertThrows(IllegalStateException.class,
+                    () -> orderService.validate(1L, "user@test.com"));
+
+            assertTrue(exception.getMessage().contains("Stock insuffisant"));
+            assertTrue(exception.getMessage().contains("Produit Test"));
+            // La ligne 1 a créé 1 mouvement, mais la commande n'est PAS validée
+            verify(stockMovementRepository, times(1)).save(any());
+            verify(orderRepository, never()).save(any());
+            assertEquals(4, product.getQuantity(),
+                    "Seule la ligne 1 a été traitée : 10 - 6 = 4");
+        }
+
+        @Test
+        @DisplayName("RG-02 : même produit dans 2 lignes, total = stock → OK")
+        void validate_sameProductTwoLines_exactStock_succeeds() {
+            Order order = Order.builder()
+                    .id(1L)
+                    .reference("CMD-RG02-OK")
+                    .status(OrderStatus.PENDING)
+                    .createdBy(user)
+                    .build();
+
+            // 2 lignes pour le même produit (qty=10), chacune demande 5
+            // Total = 10 = 10 disponibles → doit être accepté
+            var line1 = new com.stock.api.entity.OrderLine();
+            line1.setProduct(product);
+            line1.setQuantity(5);
+            line1.setUnitPrice(BigDecimal.valueOf(29.99));
+            line1.setSubtotal(BigDecimal.valueOf(149.95));
+
+            var line2 = new com.stock.api.entity.OrderLine();
+            line2.setProduct(product);
+            line2.setQuantity(5);
+            line2.setUnitPrice(BigDecimal.valueOf(29.99));
+            line2.setSubtotal(BigDecimal.valueOf(149.95));
+
+            order.setLines(List.of(line1, line2));
+
+            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+            when(userRepository.findByEmail("user@test.com")).thenReturn(Optional.of(user));
+            when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(productRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            OrderResponse response = orderService.validate(1L, "user@test.com");
+
+            assertEquals(OrderStatus.VALIDATED, response.getStatus());
+            verify(stockMovementRepository, times(2)).save(any());
+            assertEquals(0, product.getQuantity(),
+                    "Le stock doit être entièrement consommé (10 - 5 - 5 = 0)");
+        }
+
+        @Test
         @DisplayName("Validation d'une commande déjà validée → IllegalStateException")
         void validate_alreadyValidated_throwsException() {
             Order order = Order.builder()

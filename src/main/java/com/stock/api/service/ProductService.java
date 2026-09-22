@@ -126,6 +126,7 @@ public class ProductService {
         product.setDescription(request.getDescription());
         product.setReference(request.getReference());
         product.setPrice(request.getPrice());
+        product.setQuantity(request.getQuantity() != null ? request.getQuantity() : product.getQuantity());
         product.setAlertThreshold(request.getAlertThreshold() != null ? request.getAlertThreshold() : product.getAlertThreshold());
         product.setCategory(category);
 

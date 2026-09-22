@@ -12,7 +12,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-import java.util.Set;
+import java.util.List;
 
 import static org.hamcrest.Matchers.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -45,6 +45,7 @@ class FullFlowIT extends PostgresContainerConfig {
 
     // ═══════════════════════════════════════════════════════
     // ÉTAPE 1 : Authentification
+    // (compte admin semé par DataInitializer — l'inscription a été retirée)
     // ═══════════════════════════════════════════════════════
     @Nested
     @Order(1)
@@ -53,23 +54,20 @@ class FullFlowIT extends PostgresContainerConfig {
 
         @Test
         @Order(1)
-        @DisplayName("Inscription d'un admin → 201 + JWT")
-        void register_admin() throws Exception {
-            RegisterRequest request = RegisterRequest.builder()
-                    .email("admin@stock-api.com")
-                    .password("Admin123!")
-                    .firstName("Admin")
-                    .lastName("Test")
-                    .roles(Set.of("ADMIN", "MANAGER"))
+        @DisplayName("Connexion admin semé → 200 + JWT")
+        void login_seededAdmin() throws Exception {
+            LoginRequest request = LoginRequest.builder()
+                    .email("superadmin@stock.com")
+                    .password("superadmin")
                     .build();
 
-            MvcResult result = mockMvc.perform(post("/api/auth/register")
+            MvcResult result = mockMvc.perform(post("/api/auth/login")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isCreated())
+                    .andExpect(status().isOk())
                     .andExpect(jsonPath("$.token").isNotEmpty())
-                    .andExpect(jsonPath("$.email").value("admin@stock-api.com"))
-                    .andExpect(jsonPath("$.roles", hasItems("ADMIN", "MANAGER")))
+                    .andExpect(jsonPath("$.email").value("superadmin@stock.com"))
+                    .andExpect(jsonPath("$.roles", hasItem("SUPER_ADMIN")))
                     .andReturn();
 
             AuthResponse response = objectMapper.readValue(
@@ -82,8 +80,8 @@ class FullFlowIT extends PostgresContainerConfig {
         @DisplayName("Connexion avec le même compte → 200 + JWT")
         void login() throws Exception {
             LoginRequest request = LoginRequest.builder()
-                    .email("admin@stock-api.com")
-                    .password("Admin123!")
+                    .email("superadmin@stock.com")
+                    .password("superadmin")
                     .build();
 
             mockMvc.perform(post("/api/auth/login")
@@ -91,7 +89,7 @@ class FullFlowIT extends PostgresContainerConfig {
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.token").isNotEmpty())
-                    .andExpect(jsonPath("$.email").value("admin@stock-api.com"));
+                    .andExpect(jsonPath("$.email").value("superadmin@stock.com"));
         }
 
         @Test
@@ -99,7 +97,7 @@ class FullFlowIT extends PostgresContainerConfig {
         @DisplayName("Connexion avec mauvais mot de passe → 401")
         void login_wrongPassword() throws Exception {
             LoginRequest request = LoginRequest.builder()
-                    .email("admin@stock-api.com")
+                    .email("superadmin@stock.com")
                     .password("wrongpassword")
                     .build();
 
@@ -107,23 +105,6 @@ class FullFlowIT extends PostgresContainerConfig {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isUnauthorized());
-        }
-
-        @Test
-        @Order(4)
-        @DisplayName("Email déjà utilisé → 409")
-        void register_duplicateEmail() throws Exception {
-            RegisterRequest request = RegisterRequest.builder()
-                    .email("admin@stock-api.com")
-                    .password("Admin123!")
-                    .firstName("Admin")
-                    .lastName("Dupont")
-                    .build();
-
-            mockMvc.perform(post("/api/auth/register")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isConflict());
         }
     }
 
@@ -510,6 +491,130 @@ class FullFlowIT extends PostgresContainerConfig {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.content").isArray())
                     .andExpect(jsonPath("$.content", hasSize(greaterThanOrEqualTo(2))));
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // ÉTAPE 6 : Validation cascade sur SaleItemRequest
+    // ═══════════════════════════════════════════════════════
+    @Nested
+    @Order(6)
+    @DisplayName("6. Ventes — Validation cascade SaleItemRequest")
+    class SaleValidationFlow {
+
+        @Test
+        @Order(1)
+        @DisplayName("Vente sans articles → 400")
+        void create_sale_emptyItems_returns400() throws Exception {
+            SaleRequest request = SaleRequest.builder()
+                    .items(List.of())
+                    .build();
+
+            mockMvc.perform(post("/api/sales")
+                            .header("Authorization", "Bearer " + authToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @Order(2)
+        @DisplayName("Vente avec productId null → 400 (validation cascade)")
+        void create_sale_nullProductId_returns400() throws Exception {
+            SaleItemRequest item = SaleItemRequest.builder()
+                    .productId(null)
+                    .quantity(2)
+                    .build();
+
+            SaleRequest request = SaleRequest.builder()
+                    .items(List.of(item))
+                    .build();
+
+            mockMvc.perform(post("/api/sales")
+                            .header("Authorization", "Bearer " + authToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errors", hasKey("items[0].productId")));
+        }
+
+        @Test
+        @Order(3)
+        @DisplayName("Vente avec quantity null → 400 (validation cascade)")
+        void create_sale_nullQuantity_returns400() throws Exception {
+            SaleItemRequest item = SaleItemRequest.builder()
+                    .productId(productId)
+                    .quantity(null)
+                    .build();
+
+            SaleRequest request = SaleRequest.builder()
+                    .items(List.of(item))
+                    .build();
+
+            mockMvc.perform(post("/api/sales")
+                            .header("Authorization", "Bearer " + authToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errors", hasKey("items[0].quantity")));
+        }
+
+        @Test
+        @Order(4)
+        @DisplayName("Vente avec quantity = 0 → 400 (validation cascade @Min(1))")
+        void create_sale_quantityZero_returns400() throws Exception {
+            SaleItemRequest item = SaleItemRequest.builder()
+                    .productId(productId)
+                    .quantity(0)
+                    .build();
+
+            SaleRequest request = SaleRequest.builder()
+                    .items(List.of(item))
+                    .build();
+
+            mockMvc.perform(post("/api/sales")
+                            .header("Authorization", "Bearer " + authToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errors", hasKey("items[0].quantity")));
+        }
+
+        @Test
+        @Order(5)
+        @DisplayName("Vente valide avec articles → 201")
+        void create_sale_validRequest_returns201() throws Exception {
+            // Recharger du stock d'abord
+            StockMovementRequest stockReq = StockMovementRequest.builder()
+                    .type(MovementType.ENTRY)
+                    .productId(productId)
+                    .quantity(20)
+                    .reason("Reappro pour test vente")
+                    .build();
+
+            mockMvc.perform(post("/api/stock-movements")
+                            .header("Authorization", "Bearer " + authToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(stockReq)))
+                    .andExpect(status().isCreated());
+
+            SaleItemRequest item = SaleItemRequest.builder()
+                    .productId(productId)
+                    .quantity(2)
+                    .build();
+
+            SaleRequest request = SaleRequest.builder()
+                    .items(List.of(item))
+                    .build();
+
+            mockMvc.perform(post("/api/sales")
+                            .header("Authorization", "Bearer " + authToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.id").isNumber())
+                    .andExpect(jsonPath("$.items", hasSize(1)))
+                    .andExpect(jsonPath("$.items[0].quantity").value(2));
         }
     }
 }
