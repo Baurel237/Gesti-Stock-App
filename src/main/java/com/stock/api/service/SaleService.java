@@ -17,8 +17,15 @@ import com.stock.api.repository.SaleEditRequestRepository;
 import com.stock.api.repository.SaleRepository;
 import com.stock.api.repository.StockMovementRepository;
 import com.stock.api.repository.UserRepository;
+import com.stock.api.repository.WarehouseRepository;
+import com.stock.api.repository.WarehouseStockRepository;
+import com.stock.api.entity.Warehouse;
+import com.stock.api.entity.WarehouseStock;
+import com.stock.api.tenant.TenantContext;
+import com.stock.api.tenant.TenantGuard;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -48,6 +55,8 @@ public class SaleService {
     private final StockMovementRepository stockMovementRepository;
     private final SaleEditRequestRepository saleEditRequestRepository;
     private final AuditService auditService;
+    private final WarehouseRepository warehouseRepository;
+    private final WarehouseStockRepository warehouseStockRepository;
 
     /** Rôles pouvant consulter les ventes de tous les vendeurs. */
     private static final Set<Role> SUPERVISOR_ROLES = Set.of(Role.SUPER_ADMIN, Role.ADMIN, Role.MANAGER);
@@ -64,9 +73,18 @@ public class SaleService {
 
         User seller = userRepository.findByEmail(sellerEmail)
                 .orElseThrow(() -> new BusinessRuleException("Vendeur non trouvé : " + sellerEmail));
+        Long companyId = seller.getCompany() != null ? seller.getCompany().getId() : null;
+        TenantGuard.assertSameCompany(companyId);
+
+        // Entrepôt OPTIONNEL : fourni seulement si le module est activé pour
+        // l'entreprise ; en mode stock simple, warehouse = null (comportement V1).
+        Warehouse warehouse = resolveWarehouse(request.getWarehouseId(), companyId);
+
         Sale sale = Sale.builder()
                 .reference("VTE-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase())
                 .seller(seller)
+                .companyId(companyId)
+                .warehouse(warehouse)
                 .status(SaleStatus.COMPLETED)
                 .paymentMethod(request.getPaymentMethod() != null ? request.getPaymentMethod() : Sale.PaymentMethod.CASH)
                 .buyerName(trimOrNull(request.getBuyerName()))
@@ -78,12 +96,27 @@ public class SaleService {
             Product product = productRepository.findById(itemRequest.getProductId())
                     .orElseThrow(() -> new BusinessRuleException("Produit non trouvé (ID : " + itemRequest.getProductId() + ")"));
 
+            TenantGuard.assertSameCompany(product.getCompanyId());
+
             if (product.isDeleted()) {
                 throw new BusinessRuleException(
                     "Produit supprimé : " + product.getName() + " (réf. " + product.getReference() + ").");
             }
 
-            if (!product.canRemoveQuantity(itemRequest.getQuantity())) {
+            if (warehouse != null) {
+                // Mode entrepôts : décrémenter le stock de l'entrepôt sélectionné
+                WarehouseStock stock = warehouseStockRepository
+                        .findByProductIdAndWarehouseId(product.getId(), warehouse.getId())
+                        .orElseThrow(() -> new BusinessRuleException(
+                                String.format("« %s » n'est pas stocké dans l'entrepôt sélectionné.", product.getName())));
+                if (!stock.canRemove(itemRequest.getQuantity())) {
+                    throw new BusinessRuleException(
+                            String.format("Stock insuffisant pour « %s » dans l'entrepôt « %s ». "
+                                    + "Disponible : %d, demandé : %d.",
+                                    product.getName(), warehouse.getName(),
+                                    stock.getQuantity(), itemRequest.getQuantity()));
+                }
+            } else if (!product.canRemoveQuantity(itemRequest.getQuantity())) {
                 throw new BusinessRuleException(
                     String.format("Stock insuffisant pour « %s » (réf. %s). "
                         + "Disponible : %d unités, demandé : %d unités.",
@@ -102,7 +135,13 @@ public class SaleService {
 
             sale.addItem(item);
 
-            // Décrémenter le stock
+            // Décrémenter le stock (entrepôt si module actif, sinon stock simple)
+            if (warehouse != null) {
+                WarehouseStock stock = warehouseStockRepository
+                        .findByProductIdAndWarehouseId(product.getId(), warehouse.getId()).orElseThrow();
+                stock.setQuantity(stock.getQuantity() - itemRequest.getQuantity());
+                warehouseStockRepository.save(stock);
+            }
             product.removeQuantity(itemRequest.getQuantity());
             productRepository.save(product);
 
@@ -113,6 +152,8 @@ public class SaleService {
                     .quantity(itemRequest.getQuantity())
                     .reason("Vente " + sale.getReference())
                     .performedBy(seller)
+                    .companyId(companyId)
+                    .warehouse(warehouse)
                     .build());
         }
 
@@ -133,6 +174,9 @@ public class SaleService {
         }
         Long effectiveSellerId = supervisor ? sellerId : requester.getId();
 
+        // V2 : un ADMIN/SELLER ne voit que les ventes de son entreprise
+        Long companyId = TenantContext.getCompanyId();
+
         Page<Sale> sales;
         if (effectiveSellerId != null && status != null) {
             sales = saleRepository.findBySellerIdAndStatusOrderByCreatedAtDesc(effectiveSellerId, status, pageable);
@@ -140,6 +184,13 @@ public class SaleService {
             sales = saleRepository.findBySellerIdOrderByCreatedAtDesc(effectiveSellerId, pageable);
         } else {
             sales = saleRepository.findAll(pageable);
+        }
+
+        // Filtrage entreprise (portée plateforme = tout voir)
+        if (companyId != null) {
+            sales = new PageImpl<>(
+                    sales.getContent().stream().filter(s -> companyId.equals(s.getCompanyId())).toList(),
+                    pageable, sales.getTotalElements());
         }
         return sales.map(this::toResponse);
     }
@@ -478,8 +529,16 @@ public class SaleService {
     /** Remet en stock les quantités vendues et trace les mouvements ENTRY. */
     private void restockSale(Sale sale) {
         User performer = sale.getSeller();
+        Warehouse warehouse = sale.getWarehouse();
         for (SaleItem item : sale.getItems()) {
             Product product = item.getProduct();
+            if (warehouse != null) {
+                warehouseStockRepository.findByProductIdAndWarehouseId(product.getId(), warehouse.getId())
+                        .ifPresent(stock -> {
+                            stock.setQuantity(stock.getQuantity() + item.getQuantity());
+                            warehouseStockRepository.save(stock);
+                        });
+            }
             product.addQuantity(item.getQuantity());
             productRepository.save(product);
             stockMovementRepository.save(StockMovement.builder()
@@ -488,6 +547,8 @@ public class SaleService {
                     .quantity(item.getQuantity())
                     .reason("Annulation vente " + sale.getReference())
                     .performedBy(performer)
+                    .companyId(sale.getCompanyId())
+                    .warehouse(warehouse)
                     .build());
         }
     }
@@ -629,6 +690,20 @@ public class SaleService {
                 .total((BigDecimal) row[2])
                 .build()
         ).toList();
+    }
+
+    /**
+     * Entrepôt concerné par une opération : null en mode stock simple ;
+     * en mode entrepôts, il doit appartenir à l'entreprise du token.
+     */
+    private Warehouse resolveWarehouse(Long warehouseId, Long companyId) {
+        if (warehouseId == null) {
+            return null;
+        }
+        Warehouse warehouse = warehouseRepository.findById(warehouseId)
+                .orElseThrow(() -> new BusinessRuleException("Entrepôt non trouvé : " + warehouseId));
+        TenantGuard.assertSameCompany(warehouse.getCompany().getId());
+        return warehouse.isActive() ? warehouse : null;
     }
 
     private boolean isSupervisor(User user) {

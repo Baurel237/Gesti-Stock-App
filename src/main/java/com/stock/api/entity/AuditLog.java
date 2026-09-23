@@ -24,6 +24,10 @@ public class AuditLog {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** Entreprise concernée (null = action plateforme / système). */
+    @Column(name = "company_id")
+    private Long companyId;
+
     /** Email de l'utilisateur qui a effectué l'action. */
     @Column(nullable = false, length = 100)
     private String actorEmail;

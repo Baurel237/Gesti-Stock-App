@@ -16,6 +16,9 @@ public class AuthResponse {
     private String token;
     @Builder.Default
     private String tokenType = "Bearer";
+
+    /** Refresh token (7 jours) — permet le renouvellement silencieux du token d'accès. */
+    private String refreshToken;
     private Long userId;
     private String email;
     private String firstName;

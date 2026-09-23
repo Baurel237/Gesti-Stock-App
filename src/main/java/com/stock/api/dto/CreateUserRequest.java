@@ -16,6 +16,13 @@ import java.util.Set;
 @Builder
 public class CreateUserRequest {
 
+    /**
+     * Entreprise cible (V2) — réservé au SUPER_ADMIN : permet de créer un
+     * compte dans n'importe quelle entreprise. Un ADMIN crée toujours dans
+     * la sienne (champ ignoré).
+     */
+    private Long companyId;
+
     @NotBlank(message = "L'email est obligatoire")
     @Email(message = "L'email doit être valide")
     private String email;

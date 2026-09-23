@@ -37,6 +37,14 @@ public class User {
     private String lastName;
 
     /**
+     * Entreprise de rattachement (V2 multi-entreprises).
+     * NULL = compte plateforme (SUPER_ADMIN) avec vue globale.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "company_id")
+    private Company company;
+
+    /**
      * RG-05 : au moins un rôle actif.
      * Utilise ElementCollection pour stocker les rôles dans une table séparée.
      */

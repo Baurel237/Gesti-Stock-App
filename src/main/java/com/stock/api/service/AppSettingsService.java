@@ -4,6 +4,8 @@ import com.stock.api.dto.AppSettingsResponse;
 import com.stock.api.entity.AppSettings;
 import com.stock.api.exception.BusinessRuleException;
 import com.stock.api.repository.AppSettingsRepository;
+import com.stock.api.repository.CompanyRepository;
+import com.stock.api.tenant.TenantContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,6 +37,7 @@ public class AppSettingsService {
 
     private final AppSettingsRepository appSettingsRepository;
     private final AuditService auditService;
+    private final CompanyRepository companyRepository;
 
     /**
      * Renvoie les paramètres courants, en créant le singleton avec des
@@ -59,7 +62,7 @@ public class AppSettingsService {
         settings.setLowStockEmails(normalize(request.getLowStockEmails()));
 
         AppSettings saved = appSettingsRepository.save(settings);
-        auditService.record("UPDATE", "AppSettings", saved.getId(), "Paramètres application",
+        auditService.record("UPDATE", "AppSettings", saved.getCompanyId(), "Paramètres application",
                 String.format("devise=%s, langue=%s", saved.getCurrency(), saved.getLocale()));
 
         log.info("Paramètres mis à jour : devise={}, langue={}", saved.getCurrency(), saved.getLocale());
@@ -76,10 +79,19 @@ public class AppSettingsService {
         }
     }
 
+    /**
+     * Paramètres de l'entreprise du token (V2) ; portée plateforme (SUPER_ADMIN
+     * sans entreprise) → première entreprise, pour garder une UI fonctionnelle.
+     */
     private AppSettings getOrCreate() {
-        return appSettingsRepository.findById(AppSettings.SINGLETON_ID)
+        Long companyId = TenantContext.getCompanyId() != null
+                ? TenantContext.getCompanyId()
+                : companyRepository.findFirstByOrderByIdAsc()
+                        .orElseThrow(() -> new IllegalStateException("Aucune entreprise initialisée"))
+                        .getId();
+        return appSettingsRepository.findById(companyId)
                 .orElseGet(() -> appSettingsRepository.save(AppSettings.builder()
-                        .id(AppSettings.SINGLETON_ID)
+                        .companyId(companyId)
                         .currency("EUR")
                         .locale("fr")
                         .build()));

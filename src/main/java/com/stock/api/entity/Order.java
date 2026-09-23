@@ -33,6 +33,10 @@ public class Order {
     @JoinColumn(name = "created_by_id", nullable = false)
     private User createdBy;
 
+    /** Entreprise propriétaire (V2 multi-entreprises). */
+    @Column(name = "company_id", nullable = false)
+    private Long companyId;
+
     /**
      * Statut de la commande avec transitions contrôlées.
      */

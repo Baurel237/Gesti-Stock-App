@@ -9,6 +9,7 @@ import com.stock.api.exception.BusinessRuleException;
 import com.stock.api.repository.ProductCommentRepository;
 import com.stock.api.repository.ProductRepository;
 import com.stock.api.repository.UserRepository;
+import com.stock.api.tenant.TenantGuard;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -45,10 +46,12 @@ public class ProductCommentService {
 
         User author = userRepository.findByEmail(authorEmail)
                 .orElseThrow(() -> new BusinessRuleException("Utilisateur non trouvé"));
+        TenantGuard.assertSameCompany(product.getCompanyId());
 
         ProductComment comment = ProductComment.builder()
                 .product(product)
                 .author(author)
+                .companyId(product.getCompanyId())
                 .content(request.getContent().trim())
                 .category(request.getCategory())
                 .build();

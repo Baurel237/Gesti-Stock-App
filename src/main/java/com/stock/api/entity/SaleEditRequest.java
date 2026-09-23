@@ -29,6 +29,10 @@ public class SaleEditRequest {
     @JoinColumn(name = "sale_id", nullable = false)
     private Sale sale;
 
+    /** Entreprise propriétaire (copiée de la vente à la création). */
+    @Column(name = "company_id", nullable = false)
+    private Long companyId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     @Builder.Default

@@ -27,4 +27,9 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     Page<Order> findByFilters(@Param("status") OrderStatus status,
                                @Param("createdById") Long createdById,
                                Pageable pageable);
+
+    /** Agrégats dashboard : COUNT des commandes en attente. */
+    @Query("SELECT COUNT(o) FROM Order o WHERE o.status = 'PENDING' " +
+           "AND (:companyId IS NULL OR o.companyId = :companyId)")
+    long countPendingOrders(@Param("companyId") Long companyId);
 }

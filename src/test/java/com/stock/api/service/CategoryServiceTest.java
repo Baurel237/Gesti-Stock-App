@@ -5,6 +5,8 @@ import com.stock.api.dto.CategoryResponse;
 import com.stock.api.entity.Category;
 import com.stock.api.repository.CategoryRepository;
 import com.stock.api.repository.ProductRepository;
+import com.stock.api.tenant.TenantContext;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -40,16 +42,25 @@ class CategoryServiceTest {
     @InjectMocks
     private CategoryService categoryService;
 
+    private static final long COMPANY_ID = 10L;
+
     private Category category;
 
     @BeforeEach
     void setUp() {
+        TenantContext.setCompanyId(COMPANY_ID);
         category = Category.builder()
                 .id(1L)
                 .name("Électronique")
                 .description("Appareils électroniques")
+                .companyId(COMPANY_ID)
                 .deleted(false)
                 .build();
+    }
+
+    @AfterEach
+    void tearDown() {
+        TenantContext.clear();
     }
 
     // ═══════════════════════════════════════════════════════
@@ -125,13 +136,13 @@ class CategoryServiceTest {
         @DisplayName("findAll ne retourne que les catégories non supprimées")
         void findAll_excludesDeleted() {
             Page<Category> page = new PageImpl<>(Collections.singletonList(category));
-            when(categoryRepository.findByDeletedFalse(any(Pageable.class))).thenReturn(page);
+            when(categoryRepository.findByFilters(eq(COMPANY_ID), any(Pageable.class))).thenReturn(page);
 
             Page<CategoryResponse> result = categoryService.findAll(Pageable.unpaged());
 
             assertEquals(1, result.getContent().size());
             assertFalse(result.getContent().get(0).isDeleted());
-            verify(categoryRepository).findByDeletedFalse(any(Pageable.class));
+            verify(categoryRepository).findByFilters(eq(COMPANY_ID), any(Pageable.class));
         }
 
         @Test
@@ -155,7 +166,8 @@ class CategoryServiceTest {
         @Test
         @DisplayName("Création avec nom unique → succès")
         void create_uniqueName() {
-            when(categoryRepository.existsByNameAndDeletedFalse("Nouvelle")).thenReturn(false);
+            when(categoryRepository.existsByCompanyIdAndNameAndDeletedFalse(COMPANY_ID, "Nouvelle"))
+                    .thenReturn(false);
             when(categoryRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
             CategoryRequest request = CategoryRequest.builder()
@@ -173,7 +185,8 @@ class CategoryServiceTest {
         @Test
         @DisplayName("Création avec nom existant → IllegalStateException")
         void create_duplicateName_throwsException() {
-            when(categoryRepository.existsByNameAndDeletedFalse("Électronique")).thenReturn(true);
+            when(categoryRepository.existsByCompanyIdAndNameAndDeletedFalse(COMPANY_ID, "Électronique"))
+                    .thenReturn(true);
 
             CategoryRequest request = CategoryRequest.builder()
                     .name("Électronique")
@@ -187,7 +200,8 @@ class CategoryServiceTest {
         @DisplayName("Mise à jour → succès")
         void update_success() {
             when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
-            when(categoryRepository.existsByNameAndDeletedFalse("Modifié")).thenReturn(false);
+            when(categoryRepository.existsByCompanyIdAndNameAndDeletedFalse(COMPANY_ID, "Modifié"))
+                    .thenReturn(false);
             when(categoryRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
             CategoryRequest request = CategoryRequest.builder()

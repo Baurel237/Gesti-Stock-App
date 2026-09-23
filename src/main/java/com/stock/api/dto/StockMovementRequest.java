@@ -14,6 +14,12 @@ import lombok.NoArgsConstructor;
 @Builder
 public class StockMovementRequest {
 
+    /**
+     * Entrepôt concerné (OPTIONNEL — module entrepôts activé). Null en mode
+     * stock simple : l'opération touche uniquement la quantité globale produit.
+     */
+    private Long warehouseId;
+
     @NotNull(message = "Le type de mouvement est obligatoire")
     private MovementType type;
 

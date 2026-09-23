@@ -14,6 +14,8 @@ import com.stock.api.repository.OrderRepository;
 import com.stock.api.repository.ProductRepository;
 import com.stock.api.repository.StockMovementRepository;
 import com.stock.api.repository.UserRepository;
+import com.stock.api.tenant.TenantContext;
+import com.stock.api.tenant.TenantGuard;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -71,6 +73,8 @@ public class OrderService {
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Utilisateur non trouvé avec l'email: " + userEmail));
+        Long companyId = user.getCompany() != null ? user.getCompany().getId() : null;
+        TenantGuard.assertSameCompany(companyId);
 
         // Générer une référence unique
         String reference = generateReference();
@@ -79,6 +83,7 @@ public class OrderService {
         Order order = Order.builder()
                 .reference(reference)
                 .createdBy(user)
+                .companyId(companyId)
                 .status(OrderStatus.PENDING)
                 .notes(request.getNotes())
                 .lines(new ArrayList<>())
@@ -89,6 +94,8 @@ public class OrderService {
             Product product = productRepository.findById(lineRequest.getProductId())
                     .orElseThrow(() -> new IllegalArgumentException(
                             "Produit non trouvé avec l'id: " + lineRequest.getProductId()));
+
+            TenantGuard.assertSameCompany(product.getCompanyId());
 
             if (product.isDeleted()) {
                 throw new IllegalArgumentException("Produit supprimé: " + product.getName());

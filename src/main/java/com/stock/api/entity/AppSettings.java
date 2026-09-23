@@ -7,8 +7,8 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 /**
- * Paramètres globaux de l'application (clé → valeur).
- * Une seule ligne (id = 1) : la configuration est unique.
+ * Paramètres PROPRES À CHAQUE ENTREPRISE (V2 multi-entreprises).
+ * La clé primaire est l'identifiant de l'entreprise : une ligne par tenant.
  *
  * Clés gérées :
  *  - currency       : devise d'affichage (EUR, USD, XOF, XAF, GBP, CHF, CAD, MAD, NGN)
@@ -25,11 +25,10 @@ import java.time.LocalDateTime;
 @Builder
 public class AppSettings {
 
-    /** Identifiant du singleton de configuration (toujours 1). */
-    public static final long SINGLETON_ID = 1L;
-
+    /** Identifiant de l'entreprise (clé primaire — une ligne par tenant). */
     @Id
-    private Long id;
+    @Column(name = "company_id")
+    private Long companyId;
 
     /** Devise d'affichage (code ISO 4217). */
     @NotBlank

@@ -58,6 +58,17 @@ public class StockMovement {
     @JoinColumn(name = "performed_by_id", nullable = false)
     private User performedBy;
 
+    /** Entreprise propriétaire (V2 multi-entreprises). */
+    @Column(name = "company_id", nullable = false)
+    private Long companyId;
+
+    /**
+     * Entrepôt concerné (module optionnel V2) — null en mode stock simple.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "warehouse_id")
+    private Warehouse warehouse;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

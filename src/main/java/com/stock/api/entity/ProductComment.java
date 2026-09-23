@@ -36,6 +36,10 @@ public class ProductComment {
     @JoinColumn(name = "author_id", nullable = false)
     private User author;
 
+    /** Entreprise propriétaire (V2 multi-entreprises). */
+    @Column(name = "company_id", nullable = false)
+    private Long companyId;
+
     /** Contenu du commentaire (ex : « Presque fini, les clients réclament »). */
     @NotBlank
     @Column(nullable = false, length = 500)

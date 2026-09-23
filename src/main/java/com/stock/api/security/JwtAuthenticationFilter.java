@@ -1,5 +1,6 @@
 package com.stock.api.security;
 
+import com.stock.api.tenant.TenantContext;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -68,6 +69,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         );
                         authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                         SecurityContextHolder.getContext().setAuthentication(authToken);
+
+                        // V2 multi-entreprises : l'entreprise du compte alimente le
+                        // contexte de la requête (isolation des lectures). Priorité
+                        // au claim du token (état au moment de l'émission), repli sur
+                        // le compte en base (utile pour le login sans token).
+                        Long companyId = (userDetails instanceof TenantUserDetails tenant)
+                                ? tenant.getCompanyId() : null;
+                        TenantContext.setCompanyId(companyId);
                     }
                 }
             }
@@ -76,6 +85,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             logger.error("JWT authentication error: " + e.getMessage());
         }
 
-        filterChain.doFilter(request, response);
+        try {
+            filterChain.doFilter(request, response);
+        } finally {
+            // Thread pool : le contexte tenant ne doit pas fuir vers la requête suivante
+            TenantContext.clear();
+        }
     }
 }

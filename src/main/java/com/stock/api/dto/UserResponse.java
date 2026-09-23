@@ -19,6 +19,11 @@ public class UserResponse {
     private String lastName;
     private Set<String> roles;
     private boolean active;
+
+    /** Entreprise de rattachement (null = compte plateforme). */
+    private Long companyId;
+    private String companyName;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

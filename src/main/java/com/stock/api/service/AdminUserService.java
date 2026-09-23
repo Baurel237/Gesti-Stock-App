@@ -13,6 +13,8 @@ import com.stock.api.repository.SaleRepository;
 import com.stock.api.repository.StockMovementRepository;
 import com.stock.api.repository.UserRepository;
 import com.stock.api.service.AuditService;
+import com.stock.api.tenant.TenantContext;
+import com.stock.api.tenant.TenantGuard;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -37,16 +39,24 @@ public class AdminUserService {
     private final StockMovementRepository stockMovementRepository;
     private final SaleEditRequestRepository saleEditRequestRepository;
     private final ProductCommentRepository productCommentRepository;
+    private final com.stock.api.repository.CompanyRepository companyRepository;
 
     @Transactional(readOnly = true)
     public Page<UserResponse> findAll(Pageable pageable) {
-        return userRepository.findAll(pageable).map(this::toResponse);
+        // V2 : un ADMIN ne gère que les comptes de son entreprise ;
+        // le SUPER_ADMIN (scope plateforme) voit tous les comptes.
+        Long companyId = TenantContext.getCompanyId();
+        Page<User> users = companyId == null
+                ? userRepository.findAll(pageable)
+                : userRepository.findByCompanyId(companyId, pageable);
+        return users.map(this::toResponse);
     }
 
     @Transactional(readOnly = true)
     public UserResponse findById(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Utilisateur non trouvé avec l'id: " + id));
+        TenantGuard.assertSameCompany(user.getCompany() != null ? user.getCompany().getId() : null);
         return toResponse(user);
     }
 
@@ -64,6 +74,8 @@ public class AdminUserService {
                             + "Choisissez un autre email ou réactivez le compte existant.");
         }
 
+        // V2 : le compte créé est rattaché à l'entreprise de l'admin (sauf si
+        // le SUPER_ADMIN crée explicitement un compte plateforme sans entreprise).
         User user = User.builder()
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
@@ -72,6 +84,14 @@ public class AdminUserService {
                 .roles(roles)
                 .active(true)
                 .build();
+        if (CurrentUser.isSuperAdmin() && request.getCompanyId() != null) {
+            user.setCompany(companyRepository.findById(request.getCompanyId())
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Entreprise non trouvée avec l'id: " + request.getCompanyId())));
+        } else if (!CurrentUser.isPlatformScope()) {
+            user.setCompany(companyRepository.findById(TenantGuard.requireCompanyId())
+                    .orElseThrow(() -> new IllegalStateException("Entreprise introuvable")));
+        }
 
         user = userRepository.save(user);
         auditService.record("CREATE", "User", user.getId(), user.getEmail(),
@@ -269,6 +289,8 @@ public class AdminUserService {
                 .lastName(user.getLastName())
                 .roles(user.getRoles().stream().map(Role::name).collect(java.util.stream.Collectors.toSet()))
                 .active(user.isActive())
+                .companyId(user.getCompany() != null ? user.getCompany().getId() : null)
+                .companyName(user.getCompany() != null ? user.getCompany().getName() : null)
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())
                 .build();
@@ -281,6 +303,11 @@ public class AdminUserService {
             return auth != null
                     && auth.getAuthorities().stream()
                         .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN"));
+        }
+
+        /** Portée plateforme = SUPER_ADMIN non rattaché à une entreprise. */
+        static boolean isPlatformScope() {
+            return TenantContext.getCompanyId() == null;
         }
     }
 }

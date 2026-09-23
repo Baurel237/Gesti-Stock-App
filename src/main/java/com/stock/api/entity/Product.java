@@ -63,6 +63,10 @@ public class Product {
     @JoinColumn(name = "category_id", nullable = false)
     private Category category;
 
+    /** Entrepropriétaire (V2 multi-entreprises) — isolation des données. */
+    @Column(name = "company_id", nullable = false)
+    private Long companyId;
+
     /**
      * RG-04 : suppression logique (soft delete).
      */

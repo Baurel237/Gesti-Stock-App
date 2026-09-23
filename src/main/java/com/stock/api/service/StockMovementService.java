@@ -10,6 +10,12 @@ import com.stock.api.entity.User;
 import com.stock.api.repository.ProductRepository;
 import com.stock.api.repository.StockMovementRepository;
 import com.stock.api.repository.UserRepository;
+import com.stock.api.repository.WarehouseRepository;
+import com.stock.api.repository.WarehouseStockRepository;
+import com.stock.api.entity.Warehouse;
+import com.stock.api.entity.WarehouseStock;
+import com.stock.api.tenant.TenantContext;
+import com.stock.api.tenant.TenantGuard;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -20,6 +26,7 @@ import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * Service de gestion des mouvements de stock (US-07, US-08).
@@ -33,6 +40,8 @@ public class StockMovementService {
     private final StockMovementRepository stockMovementRepository;
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
+    private final WarehouseRepository warehouseRepository;
+    private final WarehouseStockRepository warehouseStockRepository;
 
     /**
      * US-08 : Historique paginé des mouvements d'un produit.
@@ -41,6 +50,12 @@ public class StockMovementService {
     public Page<StockMovementResponse> findByProductId(Long productId, Pageable pageable) {
         return stockMovementRepository.findByProductIdOrderByCreatedAtDesc(productId, pageable)
                 .map(this::toResponse);
+    }
+
+    /** Stock par entrepôt d'un produit (module optionnel). */
+    @Transactional(readOnly = true)
+    public List<WarehouseStock> getStockByWarehouse(Long productId) {
+        return warehouseStockRepository.findByProductId(productId);
     }
 
     /**
@@ -76,10 +91,11 @@ public class StockMovementService {
      */
     @Transactional
     public StockMovementResponse create(StockMovementRequest request, String userEmail) {
-        // Charger le produit
+        // Charger le produit (isolation : doit appartenir à l'entreprise du token)
         Product product = productRepository.findById(request.getProductId())
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Produit non trouvé avec l'id: " + request.getProductId()));
+        TenantGuard.assertSameCompany(product.getCompanyId());
 
         if (product.isDeleted()) {
             throw new IllegalArgumentException("Produit supprimé");
@@ -89,10 +105,32 @@ public class StockMovementService {
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Utilisateur non trouvé avec l'email: " + userEmail));
+        Long companyId = user.getCompany() != null ? user.getCompany().getId() : null;
+        TenantGuard.assertSameCompany(companyId);
+
+        // Entrepôt optionnel (module activé uniquement)
+        Warehouse warehouse = null;
+        if (request.getWarehouseId() != null) {
+            warehouse = warehouseRepository.findById(request.getWarehouseId())
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Entrepôt non trouvé avec l'id: " + request.getWarehouseId()));
+            TenantGuard.assertSameCompany(warehouse.getCompany().getId());
+        }
 
         // RG-02 : vérifier la quantité disponible pour une sortie
         if (request.getType() == MovementType.EXIT) {
-            if (!product.canRemoveQuantity(request.getQuantity())) {
+            if (warehouse != null) {
+                WarehouseStock stock = warehouseStockRepository
+                        .findByProductIdAndWarehouseId(product.getId(), warehouse.getId())
+                        .orElseThrow(() -> new IllegalStateException(
+                                String.format("'%s' n'est pas stocké dans cet entrepôt.", product.getName())));
+                if (!stock.canRemove(request.getQuantity())) {
+                    throw new IllegalStateException(
+                            String.format("Quantité insuffisante pour '%s' dans l'entrepôt '%s'. " +
+                                            "Disponible: %d, Demandé: %d",
+                                    product.getName(), warehouse.getName(), stock.getQuantity(), request.getQuantity()));
+                }
+            } else if (!product.canRemoveQuantity(request.getQuantity())) {
                 throw new IllegalStateException(
                         String.format("Quantité insuffisante pour le produit '%s'. " +
                                 "Disponible: %d, Demandé: %d",
@@ -107,6 +145,8 @@ public class StockMovementService {
                 .quantity(request.getQuantity())
                 .reason(request.getReason())
                 .performedBy(user)
+                .companyId(companyId)
+                .warehouse(warehouse)
                 .build();
 
         movement = stockMovementRepository.save(movement);
@@ -114,7 +154,26 @@ public class StockMovementService {
         // Mettre à jour la quantité du produit (RG-01 : jamais négatif)
         if (request.getType() == MovementType.ENTRY) {
             product.addQuantity(request.getQuantity());
+            if (warehouse != null) {
+                final Warehouse targetWarehouse = warehouse;
+                WarehouseStock stock = warehouseStockRepository
+                        .findByProductIdAndWarehouseId(product.getId(), warehouse.getId())
+                        .orElseGet(() -> warehouseStockRepository.save(WarehouseStock.builder()
+                                .companyId(companyId)
+                                .product(product)
+                                .warehouse(targetWarehouse)
+                                .quantity(0)
+                                .build()));
+                stock.setQuantity(stock.getQuantity() + request.getQuantity());
+                warehouseStockRepository.save(stock);
+            }
         } else {
+            if (warehouse != null) {
+                WarehouseStock stock = warehouseStockRepository
+                        .findByProductIdAndWarehouseId(product.getId(), warehouse.getId()).orElseThrow();
+                stock.setQuantity(stock.getQuantity() - request.getQuantity());
+                warehouseStockRepository.save(stock);
+            }
             product.removeQuantity(request.getQuantity());
         }
         productRepository.save(product);

@@ -6,6 +6,8 @@ import com.stock.api.entity.Category;
 import com.stock.api.entity.Product;
 import com.stock.api.repository.CategoryRepository;
 import com.stock.api.repository.ProductRepository;
+import com.stock.api.tenant.TenantContext;
+import com.stock.api.tenant.TenantGuard;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -26,10 +28,11 @@ public class ProductService {
 
     /**
      * US-06 : Liste paginée des produits actifs avec filtres.
+     * V2 : tout utilisateur non-plateforme ne voit que les produits de son entreprise.
      */
     @Transactional(readOnly = true)
     public Page<ProductResponse> findAll(Long categoryId, String name, Pageable pageable) {
-        return productRepository.findByFilters(categoryId, name, pageable)
+        return productRepository.findByFilters(TenantContext.getCompanyId(), categoryId, name, pageable)
                 .map(this::toResponse);
     }
 
@@ -40,6 +43,7 @@ public class ProductService {
     public ProductResponse findById(Long id) {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Produit non trouvé avec l'id: " + id));
+        TenantGuard.assertSameCompany(product.getCompanyId());
         if (product.isDeleted()) {
             throw new IllegalArgumentException("Produit supprimé");
         }
@@ -51,7 +55,7 @@ public class ProductService {
      */
     @Transactional(readOnly = true)
     public Page<ProductResponse> findLowStock(Pageable pageable) {
-        return productRepository.findLowStockProducts(pageable)
+        return productRepository.findLowStockProducts(TenantContext.getCompanyId(), pageable)
                 .map(this::toResponse);
     }
 
@@ -85,6 +89,7 @@ public class ProductService {
                 .quantity(request.getQuantity() != null ? request.getQuantity() : 0)
                 .alertThreshold(request.getAlertThreshold() != null ? request.getAlertThreshold() : 10)
                 .category(category)
+                .companyId(category.getCompanyId())
                 .build();
 
         product = productRepository.save(product);
@@ -102,6 +107,7 @@ public class ProductService {
         if (product.isDeleted()) {
             throw new IllegalArgumentException("Produit supprimé");
         }
+        TenantGuard.assertSameCompany(product.getCompanyId());
 
         // Vérifier l'unicité du nom si modifié
         if (!product.getName().equals(request.getName())
@@ -145,6 +151,7 @@ public class ProductService {
         if (product.isDeleted()) {
             throw new IllegalArgumentException("Produit déjà supprimé");
         }
+        TenantGuard.assertSameCompany(product.getCompanyId());
 
         product.setDeleted(true);
         productRepository.save(product);

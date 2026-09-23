@@ -5,6 +5,8 @@ import com.stock.api.dto.CategoryResponse;
 import com.stock.api.entity.Category;
 import com.stock.api.repository.CategoryRepository;
 import com.stock.api.repository.ProductRepository;
+import com.stock.api.tenant.TenantContext;
+import com.stock.api.tenant.TenantGuard;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -27,7 +29,7 @@ public class CategoryService {
      */
     @Transactional(readOnly = true)
     public Page<CategoryResponse> findAll(Pageable pageable) {
-        return categoryRepository.findByDeletedFalse(pageable)
+        return categoryRepository.findByFilters(TenantContext.getCompanyId(), pageable)
                 .map(this::toResponse);
     }
 
@@ -38,6 +40,7 @@ public class CategoryService {
     public CategoryResponse findById(Long id) {
         Category category = categoryRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Catégorie non trouvée avec l'id: " + id));
+        TenantGuard.assertSameCompany(category.getCompanyId());
         if (category.isDeleted()) {
             throw new IllegalArgumentException("Catégorie supprimée");
         }
@@ -49,13 +52,15 @@ public class CategoryService {
      */
     @Transactional
     public CategoryResponse create(CategoryRequest request) {
-        if (categoryRepository.existsByNameAndDeletedFalse(request.getName())) {
+        Long companyId = TenantGuard.requireCompanyId();
+        if (categoryRepository.existsByCompanyIdAndNameAndDeletedFalse(companyId, request.getName())) {
             throw new IllegalStateException("Une catégorie avec ce nom existe déjà");
         }
 
         Category category = Category.builder()
                 .name(request.getName())
                 .description(request.getDescription())
+                .companyId(companyId)
                 .build();
 
         category = categoryRepository.save(category);
@@ -73,10 +78,12 @@ public class CategoryService {
         if (category.isDeleted()) {
             throw new IllegalArgumentException("Catégorie supprimée");
         }
+        TenantGuard.assertSameCompany(category.getCompanyId());
 
         // Vérifier l'unicité du nom si modifié
         if (!category.getName().equals(request.getName())
-                && categoryRepository.existsByNameAndDeletedFalse(request.getName())) {
+                && categoryRepository.existsByCompanyIdAndNameAndDeletedFalse(
+                        TenantContext.getCompanyId(), request.getName())) {
             throw new IllegalStateException("Une catégorie avec ce nom existe déjà");
         }
 
@@ -99,6 +106,7 @@ public class CategoryService {
         if (category.isDeleted()) {
             throw new IllegalArgumentException("Catégorie déjà supprimée");
         }
+        TenantGuard.assertSameCompany(category.getCompanyId());
 
         // Vérifier qu'aucun produit actif n'est rattaché
         if (!productRepository.findByCategory_IdAndDeletedFalse(id, Pageable.unpaged()).isEmpty()) {

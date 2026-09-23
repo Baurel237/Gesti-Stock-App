@@ -1,6 +1,7 @@
 package com.stock.api.config;
 
 import com.stock.api.entity.Category;
+import com.stock.api.entity.Company;
 import com.stock.api.entity.Product;
 import com.stock.api.entity.Role;
 import com.stock.api.entity.Sale;
@@ -8,6 +9,7 @@ import com.stock.api.entity.SaleItem;
 import com.stock.api.entity.StockMovement;
 import com.stock.api.entity.User;
 import com.stock.api.repository.CategoryRepository;
+import com.stock.api.repository.CompanyRepository;
 import com.stock.api.repository.ProductRepository;
 import com.stock.api.repository.SaleRepository;
 import com.stock.api.repository.StockMovementRepository;
@@ -52,6 +54,7 @@ public class DataInitializer implements CommandLineRunner {
     private final AuditService auditService;
     private final PasswordEncoder passwordEncoder;
     private final JdbcTemplate jdbcTemplate;
+    private final CompanyRepository companyRepository;
 
     /**
      * Gestion des rôles pour les vendeurs et leurs interfaces (stats temps
@@ -98,8 +101,10 @@ public class DataInitializer implements CommandLineRunner {
             """;
 
     private static final String ADD_PARTIAL_INDEX_SQL = """
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_products_name_active ON products (name) WHERE deleted = FALSE;
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_name_active ON categories (name) WHERE deleted = FALSE;
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_products_company_name
+                ON products (company_id, name) WHERE deleted = FALSE;
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_company_name
+                ON categories (company_id, name) WHERE deleted = FALSE;
             """;
 
     /**
@@ -120,13 +125,32 @@ public class DataInitializer implements CommandLineRunner {
         realignUserRoleCheckConstraint();
         realignNameUniqueConstraints();
         ensureSalesTableHasCancellationFields();
-        User seller = seedAccounts();
+        Company company = getOrCreateDemoCompany();
+        User seller = seedAccounts(company);
         seedFallbackSuperadmin();
-        seedVendorAccount();
-        seedDemoData(seller);
+        seedVendorAccount(company);
+        seedDemoData(seller, company);
         User seller2 = userRepository.findByEmail("vendeur2@stock.com").orElse(null);
-        seedSecondSellerSales(seller2);
+        seedSecondSellerSales(seller2, company);
         alignDemoAccountPasswords();
+    }
+
+    /**
+     * Entreprise de démonstration (V2 multi-entreprises) : toutes les données
+     * démo lui sont rattachées. Idempotent (un seul « Démo » par base).
+     */
+    private Company getOrCreateDemoCompany() {
+        return companyRepository.findFirstByOrderByIdAsc()
+                .orElseGet(() -> {
+                    Company created = companyRepository.save(Company.builder()
+                            .name("Démo")
+                            .slug("demo")
+                            .active(true)
+                            .warehouseEnabled(false)
+                            .build());
+                    log.info("Entreprise de démonstration créée : {} (slug: {})", created.getName(), created.getSlug());
+                    return created;
+                });
     }
 
     private void seedFallbackSuperadmin() {
@@ -148,7 +172,7 @@ public class DataInitializer implements CommandLineRunner {
                 Set.of(Role.SUPER_ADMIN, Role.ADMIN));
     }
 
-    private void seedVendorAccount() {
+    private void seedVendorAccount(Company company) {
         if (userRepository.existsByEmail(VENDOR_EMAIL)) {
             return;
         }
@@ -160,6 +184,7 @@ public class DataInitializer implements CommandLineRunner {
                 .lastName("Test")
                 .roles(new HashSet<>(Set.of(Role.SELLER)))
                 .active(true)
+                .company(company)
                 .build());
         auditService.recordFor("system", "SYSTEM", "CREATE", "User", created.getId(),
                 created.getEmail(), "Compte vendeur créé pour tests");
@@ -209,7 +234,7 @@ public class DataInitializer implements CommandLineRunner {
                                String lastName, Set<Role> roles) {
     }
 
-    private User seedAccounts() {
+    private User seedAccounts(Company company) {
         List<DemoAccount> accounts = List.of(
                 new DemoAccount("superadmin@stock.com", "superadmin", "Super", "Admin",
                         new HashSet<>(Set.of(Role.SUPER_ADMIN, Role.ADMIN))),
@@ -235,6 +260,7 @@ public class DataInitializer implements CommandLineRunner {
                         .lastName(account.lastName())
                         .roles(new HashSet<>(account.roles()))
                         .active(true)
+                        .company(company)
                         .build());
                 auditService.recordFor("system", "SYSTEM", "CREATE", "User", created.getId(),
                         created.getEmail(), "Compte de démonstration créé avec rôles : "
@@ -253,14 +279,14 @@ public class DataInitializer implements CommandLineRunner {
                                BigDecimal price, int quantity, int alertThreshold) {
     }
 
-    private void seedDemoData(User seller) {
+    private void seedDemoData(User seller, Company company) {
         if (seller == null || !seller.hasRole(Role.SELLER)) {
             return;
         }
 
         // ── Catégories ──────────────────────────────────────────
-        Category electronics = seedCategory("Électronique", "Appareils et accessoires électroniques");
-        Category office = seedCategory("Bureau", "Fournitures et mobilier de bureau");
+        Category electronics = seedCategory("Électronique", "Appareils et accessoires électroniques", company);
+        Category office = seedCategory("Bureau", "Fournitures et mobilier de bureau", company);
 
         // ── Produits ────────────────────────────────────────────
         List<DemoProduct> demoProducts = List.of(
@@ -275,18 +301,19 @@ public class DataInitializer implements CommandLineRunner {
         Product[] products = new Product[demoProducts.size()];
         for (int i = 0; i < demoProducts.size(); i++) {
             DemoProduct dp = demoProducts.get(i);
-            products[i] = seedProduct(dp, i < 4 ? electronics : office, seller);
+            products[i] = seedProduct(dp, i < 4 ? electronics : office, seller, company);
         }
 
         // ── Ventes sur les 7 derniers jours ─────────────────────
-        seedSales(seller, products);
+        seedSales(seller, products, company);
     }
 
-    private Category seedCategory(String name, String description) {
+    private Category seedCategory(String name, String description, Company company) {
         return categoryRepository.findByNameAndDeletedFalse(name).orElseGet(() -> {
             Category category = categoryRepository.save(Category.builder()
                     .name(name)
                     .description(description)
+                    .companyId(company.getId())
                     .build());
             auditService.recordFor("system", "SYSTEM", "CREATE", "Category", category.getId(),
                     name, "Catégorie de démonstration");
@@ -294,7 +321,7 @@ public class DataInitializer implements CommandLineRunner {
         });
     }
 
-    private Product seedProduct(DemoProduct dp, Category category, User seller) {
+    private Product seedProduct(DemoProduct dp, Category category, User seller, Company company) {
         return productRepository.findByNameAndDeletedFalse(dp.name()).orElseGet(() -> {
             Product product = productRepository.save(Product.builder()
                     .name(dp.name())
@@ -304,6 +331,7 @@ public class DataInitializer implements CommandLineRunner {
                     .quantity(0)
                     .alertThreshold(dp.alertThreshold())
                     .category(category)
+                    .companyId(company.getId())
                     .build());
 
             stockMovementRepository.save(StockMovement.builder()
@@ -312,6 +340,7 @@ public class DataInitializer implements CommandLineRunner {
                     .quantity(dp.quantity())
                     .reason("Stock initial (démo)")
                     .performedBy(seller)
+                    .companyId(company.getId())
                     .build());
             product.addQuantity(dp.quantity());
             productRepository.save(product);
@@ -325,7 +354,7 @@ public class DataInitializer implements CommandLineRunner {
     /**
      * Crée une vente COMPLETED datée de maintenant, puis la re-date.
      */
-    private void seedSales(User seller, Product[] products) {
+    private void seedSales(User seller, Product[] products, Company company) {
         if (saleRepository.count() > 0) {
             log.info("Ventes de démonstration ignorées : des ventes existent déjà en base");
             return;
@@ -356,6 +385,7 @@ public class DataInitializer implements CommandLineRunner {
             Sale sale = Sale.builder()
                     .reference("VTE-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase())
                     .seller(seller)
+                    .companyId(company.getId())
                     .status(Sale.SaleStatus.COMPLETED)
                     .notes("Vente de démonstration")
                     .build();
@@ -378,6 +408,7 @@ public class DataInitializer implements CommandLineRunner {
                     .quantity(quantity)
                     .reason("Vente " + saved.getReference() + " (démo)")
                     .performedBy(seller)
+                    .companyId(company.getId())
                     .build());
 
             auditService.recordFor("system", "SYSTEM", "EXIT", "StockMovement", saved.getId(),
@@ -440,7 +471,7 @@ public class DataInitializer implements CommandLineRunner {
         }
     }
 
-    private void seedSecondSellerSales(User seller2) {
+    private void seedSecondSellerSales(User seller2, Company company) {
         if (seller2 == null || !seller2.hasRole(Role.SELLER)) {
             return;
         }
@@ -470,6 +501,7 @@ public class DataInitializer implements CommandLineRunner {
             Sale sale = Sale.builder()
                     .reference("VTE-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase())
                     .seller(seller2)
+                    .companyId(company.getId())
                     .status(Sale.SaleStatus.COMPLETED)
                     .paymentMethod(Sale.PaymentMethod.CARD)
                     .notes("Vente de démonstration")
@@ -493,6 +525,7 @@ public class DataInitializer implements CommandLineRunner {
                     .quantity(quantity)
                     .reason("Vente " + saved.getReference() + " (démo)")
                     .performedBy(seller2)
+                    .companyId(company.getId())
                     .build());
 
             saleRepository.backdateSale(saved.getId(),

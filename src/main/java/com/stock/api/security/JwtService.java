@@ -55,6 +55,21 @@ public class JwtService {
         return generateToken(new HashMap<>(), userDetails);
     }
 
+    /** Génère un JWT incluant l'entreprise du compte (V2 multi-entreprises). */
+    public String generateTokenWithCompany(UserDetails userDetails, Long companyId) {
+        HashMap<String, Object> claims = new HashMap<>();
+        if (companyId != null) {
+            claims.put("companyId", companyId);
+        }
+        return generateToken(claims, userDetails);
+    }
+
+    /** Entreprise du token ; null = compte plateforme (SUPER_ADMIN). */
+    public Long extractCompanyId(String token) {
+        Object claim = extractAllClaims(token).get("companyId");
+        return claim instanceof Number number ? number.longValue() : null;
+    }
+
     /**
      * Génère un JWT avec des claims supplémentaires.
      */

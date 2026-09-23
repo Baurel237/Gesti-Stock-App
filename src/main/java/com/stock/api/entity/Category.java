@@ -33,6 +33,10 @@ public class Category {
     @Column(length = 500)
     private String description;
 
+    /** Entreprise propriétaire (V2 multi-entreprises). */
+    @Column(name = "company_id", nullable = false)
+    private Long companyId;
+
     /**
      * RG-04 : suppression logique (soft delete).
      */

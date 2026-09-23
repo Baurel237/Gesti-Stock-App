@@ -2,6 +2,7 @@ package com.stock.api.controller;
 
 import com.stock.api.dto.AuthResponse;
 import com.stock.api.dto.LoginRequest;
+import com.stock.api.dto.RefreshTokenRequest;
 import com.stock.api.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -39,6 +40,22 @@ public class AuthController {
     @ApiResponse(responseCode = "401", description = "Email ou mot de passe incorrect")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         AuthResponse response = authService.login(request);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Refresh token : renouvelle le token d'accès (24h) avec un refresh token
+     * encore valide (7j). Permet une session fluide sans re-saisie du mot de
+     * passe — le frontend rejoue silencieusement la requête échouée en 401.
+     */
+    @PostMapping("/refresh")
+    @Operation(summary = "Renouvellement de session",
+               description = "Échange un refresh token valide contre un nouveau token d'accès "
+                       + "et un nouveau refresh token (rotation)")
+    @ApiResponse(responseCode = "200", description = "Nouveaux tokens retournés")
+    @ApiResponse(responseCode = "401", description = "Refresh token invalide ou expiré")
+    public ResponseEntity<AuthResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
+        AuthResponse response = authService.refresh(request);
         return ResponseEntity.ok(response);
     }
 }

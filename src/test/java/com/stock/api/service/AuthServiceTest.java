@@ -2,10 +2,12 @@ package com.stock.api.service;
 
 import com.stock.api.dto.AuthResponse;
 import com.stock.api.dto.LoginRequest;
+import com.stock.api.dto.RefreshTokenRequest;
 import com.stock.api.entity.Role;
 import com.stock.api.entity.User;
 import com.stock.api.repository.UserRepository;
 import com.stock.api.security.JwtService;
+import io.jsonwebtoken.ExpiredJwtException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -69,6 +71,81 @@ class AuthServiceTest {
                 .roles(Set.of(Role.USER))
                 .active(true)
                 .build();
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // refresh() — Renouvellement de session
+    // ═══════════════════════════════════════════════════════
+    @Nested
+    @DisplayName("refresh() — Renouvellement de session")
+    class RefreshTests {
+
+        private final UserDetails userDetails = org.springframework.security.core.userdetails.User.builder()
+                .username("test@example.com")
+                .password("$2a$10$encoded-password")
+                .authorities("ROLE_USER")
+                .build();
+
+        @Test
+        @DisplayName("Refresh token valide → nouveaux tokens (rotation)")
+        void refresh_success() {
+            when(jwtService.extractEmail("valid-refresh")).thenReturn("test@example.com");
+            when(userDetailsService.loadUserByUsername("test@example.com")).thenReturn(userDetails);
+            when(jwtService.isTokenValid("valid-refresh", userDetails)).thenReturn(true);
+            when(jwtService.generateToken(userDetails)).thenReturn("new-access");
+            when(jwtService.generateRefreshToken(userDetails)).thenReturn("new-refresh");
+            when(userRepository.findByEmail("test@example.com")).thenReturn(Optional.of(savedUser));
+
+            AuthResponse response = authService.refresh(
+                    RefreshTokenRequest.builder().refreshToken("valid-refresh").build());
+
+            assertEquals("new-access", response.getToken());
+            assertEquals("new-refresh", response.getRefreshToken());
+            assertEquals("Bearer", response.getTokenType());
+        }
+
+        @Test
+        @DisplayName("Refresh token mal formé → AuthRefreshException")
+        void refresh_corruptedToken() {
+            when(jwtService.extractEmail("corrupted")).thenThrow(new ExpiredJwtException(null, null, "expired"));
+
+            assertThrows(AuthRefreshException.class,
+                    () -> authService.refresh(RefreshTokenRequest.builder().refreshToken("corrupted").build()));
+
+            verify(userDetailsService, never()).loadUserByUsername(any());
+        }
+
+        @Test
+        @DisplayName("Refresh token expiré → AuthRefreshException")
+        void refresh_expiredToken() {
+            when(jwtService.extractEmail("expired-refresh")).thenReturn("test@example.com");
+            when(userDetailsService.loadUserByUsername("test@example.com")).thenReturn(userDetails);
+            when(jwtService.isTokenValid("expired-refresh", userDetails)).thenReturn(false);
+
+            assertThrows(AuthRefreshException.class,
+                    () -> authService.refresh(RefreshTokenRequest.builder().refreshToken("expired-refresh").build()));
+
+            verify(jwtService, never()).generateToken(any());
+        }
+
+        @Test
+        @DisplayName("Compte désactivé → AuthRefreshException (pas de renouvellement)")
+        void refresh_disabledAccount() {
+            UserDetails disabled = org.springframework.security.core.userdetails.User.builder()
+                    .username("test@example.com")
+                    .password("$2a$10$encoded-password")
+                    .disabled(true)
+                    .authorities("ROLE_USER")
+                    .build();
+            when(jwtService.extractEmail("disabled-refresh")).thenReturn("test@example.com");
+            when(userDetailsService.loadUserByUsername("test@example.com")).thenReturn(disabled);
+            when(jwtService.isTokenValid("disabled-refresh", disabled)).thenReturn(true);
+
+            assertThrows(AuthRefreshException.class,
+                    () -> authService.refresh(RefreshTokenRequest.builder().refreshToken("disabled-refresh").build()));
+
+            verify(jwtService, never()).generateToken(any());
+        }
     }
 
     // ═══════════════════════════════════════════════════════
