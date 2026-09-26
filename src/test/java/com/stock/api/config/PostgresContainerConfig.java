@@ -12,6 +12,12 @@ import org.testcontainers.containers.PostgreSQLContainer;
  */
 public abstract class PostgresContainerConfig {
 
+    // Mode « PostgreSQL externe » : si USE_EXTERNAL_PG=true, on n'utilise pas
+    // Testcontainers (utile en local quand Docker n'est pas détecté par
+    // Testcontainers) mais un PostgreSQL déjà lancé (ex. docker compose).
+    private static final boolean USE_EXTERNAL_PG =
+            Boolean.parseBoolean(System.getenv().getOrDefault("USE_EXTERNAL_PG", "false"));
+
     // Conteneur unique partagé — démarré statiquement
     // pour que @DynamicPropertySource puisse accéder aux URLs
     protected static final PostgreSQLContainer<?> postgres =
@@ -23,13 +29,23 @@ public abstract class PostgresContainerConfig {
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
         // Démarrer le conteneur si pas encore lancé
-        if (!postgres.isRunning()) {
+        if (!USE_EXTERNAL_PG && !postgres.isRunning()) {
             postgres.start();
         }
 
-        registry.add("spring.datasource.url", postgres::getJdbcUrl);
-        registry.add("spring.datasource.username", postgres::getUsername);
-        registry.add("spring.datasource.password", postgres::getPassword);
+        if (USE_EXTERNAL_PG) {
+            registry.add("spring.datasource.url",
+                    () -> System.getenv().getOrDefault("SPRING_DATASOURCE_URL",
+                            "jdbc:postgresql://localhost:5432/stock_test"));
+            registry.add("spring.datasource.username",
+                    () -> System.getenv().getOrDefault("SPRING_DATASOURCE_USERNAME", "stock_user"));
+            registry.add("spring.datasource.password",
+                    () -> System.getenv().getOrDefault("SPRING_DATASOURCE_PASSWORD", "stock_password"));
+        } else {
+            registry.add("spring.datasource.url", postgres::getJdbcUrl);
+            registry.add("spring.datasource.username", postgres::getUsername);
+            registry.add("spring.datasource.password", postgres::getPassword);
+        }
         registry.add("spring.datasource.driver-class-name", () -> "org.postgresql.Driver");
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "create-drop");
         registry.add("spring.jpa.properties.hibernate.dialect",
