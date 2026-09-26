@@ -66,27 +66,12 @@ jobs:
           retention-days: 7
 
   # ═══════════════════════════════════════════════
-  # JOB 2 : Tests d'intégration (PostgreSQL)
+  # JOB 2 : Tests d'intégration (PostgreSQL via Testcontainers)
   # ═══════════════════════════════════════════════
   integration-tests:
-    name: 🐘 Integration Tests (PostgreSQL)
+    name: 🐘 Integration Tests (PostgreSQL Testcontainers)
     runs-on: ubuntu-latest
     needs: build
-
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_DB: stock_test
-          POSTGRES_USER: test_user
-          POSTGRES_PASSWORD: test_password
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U test_user -d stock_test"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
 
     steps:
       - name: 📥 Checkout
@@ -100,11 +85,15 @@ jobs:
           cache: 'maven'
 
       - name: 🧪 Run Integration Tests
-        run: mvn verify -DskipUnitTests -Dspring.profiles.active=test
+        run: mvn verify
         env:
-          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/stock_test
-          SPRING_DATASOURCE_USERNAME: test_user
-          SPRING_DATASOURCE_PASSWORD: test_password
+          # FullFlowIT démarre sur le profil « postgresql » qui exige un secret
+          # JWT (valeur de test, déjà publique dans application-test.properties).
+          # Le datasource vient de Testcontainers (@DynamicPropertySource, priorité
+          # maximale) : Hibernate génère le schéma (create-drop), les migrations
+          # Flyway V2+ supposant un schéma Hibernate pré-existant sont désactivées.
+          JWT_SECRET: ZGV2LXRlc3Qtc2VjcmV0LWtleS1mb3Itand0LXNpZ25pbmctbXVzdC1iZS1sb25nLWVub3VnaA==
+          SPRING_FLYWAY_ENABLED: 'false'
 
       - name: 📊 Upload Integration Test Results
         if: always()

@@ -17,6 +17,7 @@ import com.stock.api.repository.UserRepository;
 import com.stock.api.service.AuditService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -119,6 +120,15 @@ public class DataInitializer implements CommandLineRunner {
     private static final String VENDOR_EMAIL = "vendeur@gmail.com";
     private static final String VENDOR_PASSWORD = "vendeur";
 
+    /**
+     * Active/désactive le seeding des données de démonstration (catégories,
+     * produits, ventes). Les tests d'intégration Testcontainers la passent à
+     * false : FullFlowIT part d'une base vide et crée ses propres données.
+     * Défaut : true (comportement historique).
+     */
+    @Value("${stock.data-initializer.seed-demo-data:true}")
+    private boolean seedDemoDataEnabled;
+
     @Override
     @Transactional
     public void run(String... args) {
@@ -129,9 +139,11 @@ public class DataInitializer implements CommandLineRunner {
         User seller = seedAccounts(company);
         seedFallbackSuperadmin();
         seedVendorAccount(company);
-        seedDemoData(seller, company);
-        User seller2 = userRepository.findByEmail("vendeur2@stock.com").orElse(null);
-        seedSecondSellerSales(seller2, company);
+        if (seedDemoDataEnabled) {
+            seedDemoData(seller, company);
+            User seller2 = userRepository.findByEmail("vendeur2@stock.com").orElse(null);
+            seedSecondSellerSales(seller2, company);
+        }
         alignDemoAccountPasswords();
     }
 

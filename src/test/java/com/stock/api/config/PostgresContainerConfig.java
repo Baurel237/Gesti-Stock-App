@@ -35,5 +35,8 @@ public abstract class PostgresContainerConfig {
         registry.add("spring.jpa.properties.hibernate.dialect",
                 () -> "org.hibernate.dialect.PostgreSQLDialect");
         registry.add("spring.jpa.show-sql", () -> "true");
+        // FullFlowIT part d'une base vide (il crée ses propres données) :
+        // pas de catégories/produits/ventes de démonstration de DataInitializer.
+        registry.add("stock.data-initializer.seed-demo-data", () -> "false");
     }
 }
