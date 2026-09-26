@@ -11,13 +11,14 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import com.stock.api.service.InvalidProductImageException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -44,6 +45,17 @@ public class GlobalExceptionHandler {
             body.put("details", details);
         }
         return ResponseEntity.status(status).body(body);
+    }
+
+    @ExceptionHandler(InvalidProductImageException.class)
+    public ResponseEntity<Map<String, Object>> handleInvalidProductImage(InvalidProductImageException ex) {
+        return build(HttpStatus.BAD_REQUEST, "Image invalide", ex.getMessage(), null);
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<Map<String, Object>> handleMaxUploadSize(MaxUploadSizeExceededException ex) {
+        return build(HttpStatus.BAD_REQUEST, "Image trop volumineuse",
+                "L'image ne doit pas dépasser 5 Mo.", null);
     }
 
     /** RG : règles de gestion métier violées (RG-01, RG-02, RG-05...). */

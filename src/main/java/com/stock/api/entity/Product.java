@@ -40,6 +40,14 @@ public class Product {
     @Column(nullable = false, length = 50)
     private String reference;
 
+    /** Chemin d'image unique généré par le stockage applicatif. */
+    @Column(name = "image_path", length = 255)
+    private String imagePath;
+
+    /** Type MIME vérifié à l'envoi (PNG ou JPEG). */
+    @Column(name = "image_content_type", length = 50)
+    private String imageContentType;
+
     /**
      * RG-01 : quantité en stock, jamais négative.
      */

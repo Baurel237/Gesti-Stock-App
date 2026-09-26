@@ -1,0 +1,2 @@
+ALTER TABLE products ADD COLUMN IF NOT EXISTS image_path VARCHAR(255);
+ALTER TABLE products ADD COLUMN IF NOT EXISTS image_content_type VARCHAR(50);

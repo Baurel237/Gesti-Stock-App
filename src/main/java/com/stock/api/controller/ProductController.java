@@ -3,6 +3,7 @@ package com.stock.api.controller;
 import com.stock.api.dto.ProductRequest;
 import com.stock.api.dto.ProductResponse;
 import com.stock.api.service.ProductService;
+import com.stock.api.service.ProductImageService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -11,10 +12,15 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * US-05 : CRUD des produits.
@@ -27,6 +33,7 @@ import org.springframework.web.bind.annotation.*;
 public class ProductController {
 
     private final ProductService productService;
+    private final ProductImageService productImageService;
 
     /**
      * US-06 : Liste paginée avec filtres optionnels.
@@ -95,6 +102,37 @@ public class ProductController {
             @Parameter(description = "ID du produit") @PathVariable Long id,
             @Valid @RequestBody ProductRequest request) {
         return ResponseEntity.ok(productService.update(id, request));
+    }
+
+    /**
+     * Ajout ou remplacement de la photo d'un produit.
+     */
+    @PutMapping(value = "/{id}/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER')")
+    public ResponseEntity<ProductResponse> uploadImage(
+            @PathVariable Long id,
+            @RequestPart("file") MultipartFile file) {
+        productImageService.upload(id, file);
+        return ResponseEntity.ok(productService.findById(id));
+    }
+
+    /** Retourne une image uniquement après authentification et contrôle tenant. */
+    @GetMapping("/{id}/image")
+    public ResponseEntity<Resource> getImage(@PathVariable Long id) {
+        ProductImageService.ProductImageFile image = productImageService.load(id);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(image.contentType()))
+                .cacheControl(CacheControl.noCache())
+                .header("X-Content-Type-Options", "nosniff")
+                .body(new FileSystemResource(image.path()));
+    }
+
+    /** Supprime uniquement la photo, sans supprimer le produit. */
+    @DeleteMapping("/{id}/image")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER')")
+    public ResponseEntity<ProductResponse> deleteImage(@PathVariable Long id) {
+        productImageService.remove(id);
+        return ResponseEntity.ok(productService.findById(id));
     }
 
     /**

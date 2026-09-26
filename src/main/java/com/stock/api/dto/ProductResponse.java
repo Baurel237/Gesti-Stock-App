@@ -18,6 +18,7 @@ public class ProductResponse {
     private String name;
     private String description;
     private String reference;
+    private String imageUrl;
     private BigDecimal price;
     private Integer quantity;
     private Integer alertThreshold;

@@ -1,5 +1,6 @@
 HELP.md
 target/
+/uploads/
 
 ### Secrets locaux (jamais commités) ###
 .env

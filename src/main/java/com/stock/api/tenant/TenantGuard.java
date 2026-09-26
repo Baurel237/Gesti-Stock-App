@@ -1,6 +1,8 @@
 package com.stock.api.tenant;
 
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 /**
  * Garde-fou d'isolation multi-entreprises.
@@ -18,7 +20,7 @@ public final class TenantGuard {
      * plateforme) a accès à tout.
      */
     public static void assertSameCompany(Long resourceCompanyId) {
-        Long current = TenantContext.getCompanyId();
+        Long current = companyScope();
         if (current == null) {
             return; // SUPER_ADMIN : portée plateforme
         }
@@ -30,11 +32,35 @@ public final class TenantGuard {
 
     /** Entreprise du contexte ; AccessDenied si portée plateforme. */
     public static Long requireCompanyId() {
-        Long current = TenantContext.getCompanyId();
+        Long current = companyScope();
         if (current == null) {
             throw new AccessDeniedException(
                     "Opération réservée aux utilisateurs rattachés à une entreprise.");
         }
         return current;
+    }
+
+    /**
+     * Retourne la portée courante. Une portée nulle signifie plateforme et
+     * n'est autorisée que pour SUPER_ADMIN quand une authentification existe.
+     * L'absence d'Authentication est tolérée pour les traitements internes et
+     * les tests unitaires qui ne traversent pas Spring Security.
+     */
+    public static Long companyScope() {
+        Long current = TenantContext.getCompanyId();
+        if (current != null) {
+            return current;
+        }
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return null;
+        }
+        boolean platformAdmin = authentication.getAuthorities().stream()
+                .anyMatch(authority -> "ROLE_SUPER_ADMIN".equals(authority.getAuthority()));
+        if (!platformAdmin) {
+            throw new AccessDeniedException("Une portée plateforme est réservée au SUPER_ADMIN.");
+        }
+        return null;
     }
 }

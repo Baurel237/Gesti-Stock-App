@@ -14,7 +14,6 @@ import com.stock.api.repository.OrderRepository;
 import com.stock.api.repository.ProductRepository;
 import com.stock.api.repository.StockMovementRepository;
 import com.stock.api.repository.UserRepository;
-import com.stock.api.tenant.TenantContext;
 import com.stock.api.tenant.TenantGuard;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -49,7 +48,7 @@ public class OrderService {
      */
     @Transactional(readOnly = true)
     public Page<OrderResponse> findAll(OrderStatus status, Long createdById, Pageable pageable) {
-        return orderRepository.findByFilters(status, createdById, pageable)
+        return orderRepository.findByFilters(TenantGuard.companyScope(), status, createdById, pageable)
                 .map(this::toResponse);
     }
 
@@ -60,6 +59,7 @@ public class OrderService {
     public OrderResponse findById(Long id) {
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Commande non trouvée avec l'id: " + id));
+        TenantGuard.assertSameCompany(order.getCompanyId());
         return toResponse(order);
     }
 
@@ -126,6 +126,7 @@ public class OrderService {
     public OrderResponse validate(Long id, String userEmail) {
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Commande non trouvée avec l'id: " + id));
+        TenantGuard.assertSameCompany(order.getCompanyId());
 
         if (order.getStatus() != OrderStatus.PENDING) {
             throw new IllegalStateException(
@@ -157,6 +158,7 @@ public class OrderService {
                     .quantity(line.getQuantity())
                     .reason("Sortie liée à la commande " + order.getReference())
                     .performedBy(user)
+                    .companyId(order.getCompanyId())
                     .order(order)
                     .build();
 
@@ -185,6 +187,7 @@ public class OrderService {
     public OrderResponse cancel(Long id, String userEmail) {
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Commande non trouvée avec l'id: " + id));
+        TenantGuard.assertSameCompany(order.getCompanyId());
 
         if (order.getStatus() == OrderStatus.CANCELLED) {
             throw new IllegalStateException(

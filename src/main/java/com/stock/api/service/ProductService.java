@@ -14,6 +14,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Objects;
+
 /**
  * Service de gestion des produits (US-05, US-06).
  * RG-01 : quantité jamais négative.
@@ -80,6 +82,7 @@ public class ProductService {
         if (category.isDeleted()) {
             throw new IllegalArgumentException("Catégorie supprimée");
         }
+        TenantGuard.assertSameCompany(category.getCompanyId());
 
         Product product = Product.builder()
                 .name(request.getName())
@@ -127,6 +130,10 @@ public class ProductService {
         if (category.isDeleted()) {
             throw new IllegalArgumentException("Catégorie supprimée");
         }
+        if (!Objects.equals(category.getCompanyId(), product.getCompanyId())) {
+            throw new IllegalArgumentException("La catégorie doit appartenir à la même entreprise que le produit");
+        }
+        TenantGuard.assertSameCompany(category.getCompanyId());
 
         product.setName(request.getName());
         product.setDescription(request.getDescription());
@@ -163,6 +170,9 @@ public class ProductService {
                 .name(product.getName())
                 .description(product.getDescription())
                 .reference(product.getReference())
+                .imageUrl(product.getImagePath() != null
+                        ? "/api/products/" + product.getId() + "/image?v=" + product.getUpdatedAt().toString()
+                        : null)
                 .price(product.getPrice())
                 .quantity(product.getQuantity())
                 .alertThreshold(product.getAlertThreshold())

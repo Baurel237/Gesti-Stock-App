@@ -21,10 +21,12 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     Optional<Order> findByReference(String reference);
 
     @Query("SELECT o FROM Order o WHERE " +
-            "(:status IS NULL OR o.status = :status) " +
+            "(:companyId IS NULL OR o.companyId = :companyId) " +
+            "AND (:status IS NULL OR o.status = :status) " +
             "AND (:createdById IS NULL OR o.createdBy.id = :createdById) " +
             "ORDER BY o.createdAt DESC")
-    Page<Order> findByFilters(@Param("status") OrderStatus status,
+    Page<Order> findByFilters(@Param("companyId") Long companyId,
+                               @Param("status") OrderStatus status,
                                @Param("createdById") Long createdById,
                                Pageable pageable);
 
