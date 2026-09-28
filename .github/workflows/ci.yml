@@ -90,10 +90,9 @@ jobs:
           # FullFlowIT démarre sur le profil « postgresql » qui exige un secret
           # JWT (valeur de test, déjà publique dans application-test.properties).
           # Le datasource vient de Testcontainers (@DynamicPropertySource, priorité
-          # maximale) : Hibernate génère le schéma (create-drop), les migrations
-          # Flyway V2+ supposant un schéma Hibernate pré-existant sont désactivées.
+          # maximale). Le schéma est créé par les migrations Flyway (V1→V5) puis
+          # audité par Hibernate (ddl-auto=validate) — exactement comme en prod.
           JWT_SECRET: ZGV2LXRlc3Qtc2VjcmV0LWtleS1mb3Itand0LXNpZ25pbmctbXVzdC1iZS1sb25nLWVub3VnaA==
-          SPRING_FLYWAY_ENABLED: 'false'
 
       - name: 📊 Upload Integration Test Results
         if: always()
