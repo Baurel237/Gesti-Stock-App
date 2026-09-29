@@ -1,5 +1,6 @@
 package com.stock.api.controller;
 
+import com.stock.api.dto.WarehouseContentLineResponse;
 import com.stock.api.dto.WarehouseRequest;
 import com.stock.api.dto.WarehouseResponse;
 import com.stock.api.dto.WarehouseStockResponse;
@@ -53,6 +54,14 @@ public class WarehouseController {
     public ResponseEntity<WarehouseResponse> findById(
             @Parameter(description = "ID de l'entrepôt") @PathVariable Long id) {
         return ResponseEntity.ok(warehouseService.findById(id));
+    }
+
+    @GetMapping("/{id}/content")
+    @Operation(summary = "Contenu d'un entrepôt",
+               description = "Lignes produit/quantité stockées dans cet entrepôt (doit appartenir à l'entreprise du token)")
+    public ResponseEntity<List<WarehouseContentLineResponse>> getContent(
+            @Parameter(description = "ID de l'entrepôt") @PathVariable Long id) {
+        return ResponseEntity.ok(warehouseService.getContent(id));
     }
 
     @PostMapping

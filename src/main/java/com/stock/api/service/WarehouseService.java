@@ -1,5 +1,6 @@
 package com.stock.api.service;
 
+import com.stock.api.dto.WarehouseContentLineResponse;
 import com.stock.api.dto.WarehouseRequest;
 import com.stock.api.dto.WarehouseResponse;
 import com.stock.api.dto.WarehouseStockResponse;
@@ -141,6 +142,35 @@ public class WarehouseService {
         warehouseRepository.delete(warehouse);
         auditService.record("DELETE", "Warehouse", id, warehouse.getName(),
                 "Entrepôt supprimé (vide)");
+    }
+
+    /**
+     * Contenu d'un entrepôt : lignes produit/quantité de l'entrepôt de
+     * l'entreprise du token, triées par quantité puis nom. Sert à la page
+     * de détail d'un entrepôt.
+     */
+    @Transactional(readOnly = true)
+    public List<WarehouseContentLineResponse> getContent(Long id) {
+        Warehouse warehouse = warehouseRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Entrepôt non trouvé avec l'id: " + id));
+        TenantGuard.assertSameCompany(warehouse.getCompany().getId());
+
+        return warehouseStockRepository.findByWarehouseIdOrderByProductId(warehouse.getId()).stream()
+                .filter(s -> s.getQuantity() != null && s.getQuantity() > 0)
+                .map(s -> {
+                    Product product = s.getProduct();
+                    return WarehouseContentLineResponse.builder()
+                            .productId(product.getId())
+                            .productName(product.getName())
+                            .productReference(product.getReference())
+                            .unitPrice(product.getPrice())
+                            .quantity(s.getQuantity())
+                            .lineValue(product.getPrice().multiply(BigDecimal.valueOf(s.getQuantity())))
+                            .build();
+                })
+                .sorted(java.util.Comparator.comparing(WarehouseContentLineResponse::getQuantity).reversed()
+                        .thenComparing(WarehouseContentLineResponse::getProductName, String.CASE_INSENSITIVE_ORDER))
+                .toList();
     }
 
     /** Stock par entrepôt pour un produit donné (entreprise du token). */
