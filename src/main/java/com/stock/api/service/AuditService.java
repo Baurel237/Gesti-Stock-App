@@ -68,18 +68,25 @@ public class AuditService {
                       String entityType, Long entityId, String entityName, String details) {
         try {
             auditLogRepository.save(AuditLog.builder()
-                    .actorEmail(actorEmail)
-                    .actorRoles(actorRoles)
-                    .action(action)
-                    .entityType(entityType)
+                    .actorEmail(truncate(actorEmail, 100))
+                    .actorRoles(truncate(actorRoles, 150))
+                    .action(truncate(action, 30))
+                    .entityType(truncate(entityType, 50))
                     .entityId(entityId)
-                    .entityName(entityName)
-                    .details(details)
+                    .entityName(truncate(entityName, 200))
+                    .details(truncate(details, 500))
                     .build());
             log.debug("Audit: {} {} {} par {}", action, entityType, entityName, actorEmail);
         } catch (Exception e) {
             // Ne jamais faire échouer la transaction métier à cause de l'audit
             log.error("Erreur lors de l'enregistrement d'audit : {}", e.getMessage());
         }
+    }
+
+    /** Limite une chaîne à la taille de colonne (l'audit ne doit jamais
+     *  faire échouer l'action métier sur un dépassement de longueur). */
+    private static String truncate(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) return value;
+        return value.substring(0, maxLength);
     }
 }

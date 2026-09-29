@@ -32,8 +32,10 @@ public class AuditLog {
     @Column(nullable = false, length = 100)
     private String actorEmail;
 
-    /** Ex : "Vendeur" — description du rôle le plus élevé au moment de l'action. */
-    @Column(length = 50)
+    /** Ex : "Vendeur" — description du rôle le plus élevé au moment de l'action.
+     *  CSV des rôles : un compte multi-rôles peut dépasser 50 caractères
+     *  (superadmin de démo = 57). Aligné sur V6 (VARCHAR(150)). */
+    @Column(length = 150)
     private String actorRoles;
 
     /** Type d'action : CREATE, UPDATE, DELETE, EXIT, ENTRY, VALIDATE, CANCEL. */
