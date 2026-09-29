@@ -157,6 +157,10 @@ public class WarehouseService {
 
         return warehouseStockRepository.findByWarehouseIdOrderByProductId(warehouse.getId()).stream()
                 .filter(s -> s.getQuantity() != null && s.getQuantity() > 0)
+                // Les produits soft-supprimés ne doivent plus apparaître dans le
+                // contenu (RG-04) : leurs lignes de stock par entrepôt peuvent
+                // subsister en base après la suppression logique.
+                .filter(s -> !s.getProduct().isDeleted())
                 .map(s -> {
                     Product product = s.getProduct();
                     return WarehouseContentLineResponse.builder()
