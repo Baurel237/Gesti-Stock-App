@@ -80,6 +80,21 @@ public class SaleService {
         // l'entreprise ; en mode stock simple, warehouse = null (comportement V1).
         Warehouse warehouse = resolveWarehouse(request.getWarehouseId(), companyId);
 
+        // Story 1.3 : un utilisateur affecté à des entrepôts (non-admin) vend
+        // uniquement depuis son périmètre. Sans affectation → comportement
+        // historique inchangé (tous les entrepôts de l'entreprise).
+        if (warehouse != null) {
+            java.util.Set<Long> assigned = seller.getWarehouses().stream()
+                    .map(Warehouse::getId)
+                    .collect(java.util.stream.Collectors.toSet());
+            boolean supervisor = seller.getRoles() != null && seller.getRoles().stream()
+                    .anyMatch(r -> r == Role.SUPER_ADMIN || r == Role.ADMIN);
+            if (!supervisor && !assigned.isEmpty() && !assigned.contains(warehouse.getId())) {
+                throw new BusinessRuleException(
+                        "Entrepôt « " + warehouse.getName() + " » hors de votre périmètre d'affectation.");
+            }
+        }
+
         Sale sale = Sale.builder()
                 .reference("VTE-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase())
                 .seller(seller)
@@ -627,7 +642,7 @@ public class SaleService {
             throw new AccessDeniedException("Réservé aux administrateurs");
         }
 
-        return saleRepository.findTopNByStatusOrderByCreatedAtDesc(SaleStatus.COMPLETED, Pageable.ofSize(limit))
+        return saleRepository.findByStatusOrderByCreatedAtDesc(SaleStatus.COMPLETED, Pageable.ofSize(limit))
                 .stream()
                 .map(this::toResponse)
                 .toList();

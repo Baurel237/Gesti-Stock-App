@@ -14,6 +14,7 @@ import com.stock.api.repository.WarehouseRepository;
 import com.stock.api.repository.WarehouseStockRepository;
 import com.stock.api.entity.Warehouse;
 import com.stock.api.entity.WarehouseStock;
+import com.stock.api.exception.BusinessRuleException;
 import com.stock.api.tenant.TenantContext;
 import com.stock.api.tenant.TenantGuard;
 import lombok.RequiredArgsConstructor;
@@ -115,6 +116,19 @@ public class StockMovementService {
                     .orElseThrow(() -> new IllegalArgumentException(
                             "Entrepôt non trouvé avec l'id: " + request.getWarehouseId()));
             TenantGuard.assertSameCompany(warehouse.getCompany().getId());
+
+            // Stories 1.2/1.3 : un utilisateur affecté à des entrepôts (non-admin)
+            // n'opère que dans son périmètre. Sans affectation → historique inchangé.
+            java.util.Set<Long> assigned = user.getWarehouses().stream()
+                    .map(Warehouse::getId)
+                    .collect(java.util.stream.Collectors.toSet());
+            boolean supervisor = user.getRoles() != null && user.getRoles().stream()
+                    .anyMatch(r -> r == com.stock.api.entity.Role.SUPER_ADMIN
+                            || r == com.stock.api.entity.Role.ADMIN);
+            if (!supervisor && !assigned.isEmpty() && !assigned.contains(warehouse.getId())) {
+                throw new BusinessRuleException(
+                        "Entrepôt « " + warehouse.getName() + " » hors de votre périmètre d'affectation.");
+            }
         }
 
         // RG-02 : vérifier la quantité disponible pour une sortie

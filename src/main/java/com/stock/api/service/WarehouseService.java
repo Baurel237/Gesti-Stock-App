@@ -7,6 +7,7 @@ import com.stock.api.dto.WarehouseStockResponse;
 import com.stock.api.dto.WarehouseTransferRequest;
 import com.stock.api.entity.Company;
 import com.stock.api.entity.Product;
+import com.stock.api.entity.Role;
 import com.stock.api.entity.StockMovement;
 import com.stock.api.entity.User;
 import com.stock.api.entity.Warehouse;
@@ -21,12 +22,14 @@ import com.stock.api.repository.WarehouseStockRepository;
 import com.stock.api.tenant.TenantContext;
 import com.stock.api.tenant.TenantGuard;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -50,10 +53,43 @@ public class WarehouseService {
     private final StockMovementRepository stockMovementRepository;
     private final AuditService auditService;
 
+    /**
+     * Stories 1.2/1.3 : entrepôts autorisés pour l'utilisateur courant.
+     *  - ADMIN/SUPER_ADMIN (ou portée plateforme) : tous les entrepôts de
+     *    l'entreprise, aucune restriction ;
+     *  - autres rôles : s'ils ont des affectations, uniquement celles-ci ;
+     *    sinon tous (comportement historique, pas de régression).
+     */
+    private List<Warehouse> filterByAssignment(List<Warehouse> warehouses, Long companyId) {
+        User current = CurrentUserHolder.currentUser(userRepository);
+        if (current == null || current.hasRole(Role.SUPER_ADMIN) || current.hasRole(Role.ADMIN)) {
+            return warehouses;
+        }
+        Set<Long> assigned = current.getWarehouses().stream()
+                .map(Warehouse::getId)
+                .collect(Collectors.toSet());
+        if (assigned.isEmpty()) {
+            return warehouses;
+        }
+        return warehouses.stream()
+                .filter(w -> assigned.contains(w.getId()))
+                .toList();
+    }
+
+    /** Lève si l'entrepôt est hors du périmètre affecté de l'utilisateur courant. */
+    private void assertWithinAssignment(Warehouse warehouse, Long companyId) {
+        List<Warehouse> allowed = filterByAssignment(List.of(warehouse), companyId);
+        if (allowed.isEmpty()) {
+            throw new AccessDeniedException(
+                "Entrepôt « " + warehouse.getName() + " » hors de votre périmètre d'affectation.");
+        }
+    }
+
     @Transactional(readOnly = true)
     public List<WarehouseResponse> findAll() {
         Long companyId = TenantGuard.requireCompanyId();
-        return warehouseRepository.findByCompanyIdOrderByCreatedAtAsc(companyId)
+        return filterByAssignment(
+                warehouseRepository.findByCompanyIdOrderByCreatedAtAsc(companyId), companyId)
                 .stream().map(w -> toResponse(w, companyId)).toList();
     }
 
@@ -62,6 +98,7 @@ public class WarehouseService {
         Warehouse warehouse = warehouseRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Entrepôt non trouvé avec l'id: " + id));
         TenantGuard.assertSameCompany(warehouse.getCompany().getId());
+        assertWithinAssignment(warehouse, warehouse.getCompany().getId());
         return toResponse(warehouse, warehouse.getCompany().getId());
     }
 
@@ -154,6 +191,7 @@ public class WarehouseService {
         Warehouse warehouse = warehouseRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Entrepôt non trouvé avec l'id: " + id));
         TenantGuard.assertSameCompany(warehouse.getCompany().getId());
+        assertWithinAssignment(warehouse, warehouse.getCompany().getId());
 
         return warehouseStockRepository.findByWarehouseIdOrderByProductId(warehouse.getId()).stream()
                 .filter(s -> s.getQuantity() != null && s.getQuantity() > 0)
@@ -226,6 +264,8 @@ public class WarehouseService {
                         "Entrepôt destination non trouvé avec l'id: " + request.getToWarehouseId()));
         TenantGuard.assertSameCompany(from.getCompany().getId());
         TenantGuard.assertSameCompany(to.getCompany().getId());
+        assertWithinAssignment(from, companyId);
+        assertWithinAssignment(to, companyId);
 
         if (!from.isActive() || !to.isActive()) {
             throw new BusinessRuleException("Le transfert exige deux entrepôts actifs.");

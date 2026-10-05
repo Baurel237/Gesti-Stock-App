@@ -24,6 +24,9 @@ public class UserResponse {
     private Long companyId;
     private String companyName;
 
+    /** Entrepôts affectés (story 1.1) — vide si aucune restriction. */
+    private Set<Long> warehouseIds;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

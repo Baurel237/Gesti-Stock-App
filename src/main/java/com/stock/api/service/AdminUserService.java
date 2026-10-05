@@ -6,12 +6,14 @@ import com.stock.api.dto.UpdateUserRequest;
 import com.stock.api.dto.UserResponse;
 import com.stock.api.entity.Role;
 import com.stock.api.entity.User;
+import com.stock.api.entity.Warehouse;
 import com.stock.api.exception.BusinessRuleException;
 import com.stock.api.repository.ProductCommentRepository;
 import com.stock.api.repository.SaleEditRequestRepository;
 import com.stock.api.repository.SaleRepository;
 import com.stock.api.repository.StockMovementRepository;
 import com.stock.api.repository.UserRepository;
+import com.stock.api.repository.WarehouseRepository;
 import com.stock.api.service.AuditService;
 import com.stock.api.tenant.TenantContext;
 import com.stock.api.tenant.TenantGuard;
@@ -40,6 +42,7 @@ public class AdminUserService {
     private final SaleEditRequestRepository saleEditRequestRepository;
     private final ProductCommentRepository productCommentRepository;
     private final com.stock.api.repository.CompanyRepository companyRepository;
+    private final WarehouseRepository warehouseRepository;
 
     @Transactional(readOnly = true)
     public Page<UserResponse> findAll(Pageable pageable) {
@@ -134,9 +137,16 @@ public class AdminUserService {
             assertCanModifyTarget(user);
         }
 
+        String warehousesChange = null;
+        if (request.getWarehouseIds() != null) {
+            warehousesChange = applyWarehouseAssignment(user, request.getWarehouseIds());
+        }
+
         user = userRepository.save(user);
         auditService.record("UPDATE", "User", user.getId(), user.getEmail(),
-                rolesChange != null ? "Rôles modifiés : " + rolesChange : "Informations mises à jour");
+                warehousesChange != null ? "Entrepôts affectés : " + warehousesChange
+                        : rolesChange != null ? "Rôles modifiés : " + rolesChange
+                        : "Informations mises à jour");
         return toResponse(user);
     }
 
@@ -228,6 +238,48 @@ public class AdminUserService {
     }
 
     /**
+     * Story 1.1 : applique l'affectation aux entrepôts d'un utilisateur.
+     * Règles :
+     *  - les entrepôts doivent exister, être actifs et appartenir à
+     *    l'entreprise de l'utilisateur cible (isolation tenant) ;
+     *  - liste vide = retrait de toutes les affectations (sans restriction).
+     * Retourne la description des entrepôts pour l'audit.
+     */
+    private String applyWarehouseAssignment(User user, Set<Long> warehouseIds) {
+        // Un compte plateforme (sans entreprise) n'a pas d'entrepôts.
+        if (user.getCompany() == null) {
+            if (!warehouseIds.isEmpty()) {
+                throw new BusinessRuleException(
+                        "Impossible d'affecter des entrepôts à un compte sans entreprise.");
+            }
+            user.getWarehouses().clear();
+            return "—";
+        }
+
+        Long companyId = user.getCompany().getId();
+        java.util.LinkedHashSet<Warehouse> warehouses = new java.util.LinkedHashSet<>();
+        for (Long warehouseId : warehouseIds) {
+            Warehouse warehouse = warehouseRepository.findById(warehouseId)
+                    .orElseThrow(() -> new BusinessRuleException(
+                            "Entrepôt non trouvé avec l'id: " + warehouseId));
+            if (!warehouse.getCompany().getId().equals(companyId)) {
+                throw new BusinessRuleException(
+                        "L'entrepôt « " + warehouse.getName() + " » n'appartient pas à l'entreprise de l'utilisateur.");
+            }
+            if (!warehouse.isActive()) {
+                throw new BusinessRuleException(
+                        "L'entrepôt « " + warehouse.getName() + " » est désactivé.");
+            }
+            warehouses.add(warehouse);
+        }
+
+        user.getWarehouses().clear();
+        user.getWarehouses().addAll(warehouses);
+        return warehouses.stream().map(Warehouse::getName)
+                .collect(java.util.stream.Collectors.joining(", "));
+    }
+
+    /**
      * Seul un SUPER_ADMIN peut attribuer les rôles ADMIN ou SUPER_ADMIN.
      */
     private void assertCanAssignRoles(Set<Role> roles) {
@@ -291,6 +343,9 @@ public class AdminUserService {
                 .active(user.isActive())
                 .companyId(user.getCompany() != null ? user.getCompany().getId() : null)
                 .companyName(user.getCompany() != null ? user.getCompany().getName() : null)
+                .warehouseIds(user.getWarehouses().stream()
+                        .map(Warehouse::getId)
+                        .collect(java.util.stream.Collectors.toSet()))
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())
                 .build();

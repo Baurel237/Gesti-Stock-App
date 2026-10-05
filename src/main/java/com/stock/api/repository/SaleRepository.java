@@ -30,8 +30,10 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
 
     List<Sale> findTop10BySellerIdAndStatusOrderByCreatedAtDesc(Long sellerId, SaleStatus status);
 
-    /** Flux temps réel : dernières ventes COMPLETED, toutes vendeuses confondues. */
-    List<Sale> findTopNByStatusOrderByCreatedAtDesc(SaleStatus status, Pageable pageable);
+    /** Flux temps réel : dernières ventes COMPLETED, toutes vendeuses confondues.
+     *  La limite est portée par le Pageable (Attention : « TopN » sans chiffre
+     *  est interprété par Spring Data comme « Top » → limite de 1). */
+    List<Sale> findByStatusOrderByCreatedAtDesc(SaleStatus status, Pageable pageable);
 
     long countBySellerId(Long sellerId);
 
