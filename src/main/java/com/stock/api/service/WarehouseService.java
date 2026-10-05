@@ -167,7 +167,8 @@ public class WarehouseService {
                 .orElseThrow(() -> new IllegalArgumentException("Entrepôt non trouvé avec l'id: " + id));
         TenantGuard.assertSameCompany(warehouse.getCompany().getId());
 
-        long stocked = warehouseStockRepository.findByWarehouseIdOrderByProductId(id).stream()
+        long stocked = warehouseStockRepository
+                .findByWarehouseIdAndProduct_DeletedFalseOrderByProductId(id).stream()
                 .filter(s -> s.getQuantity() > 0)
                 .count();
         if (stocked > 0) {
@@ -193,12 +194,12 @@ public class WarehouseService {
         TenantGuard.assertSameCompany(warehouse.getCompany().getId());
         assertWithinAssignment(warehouse, warehouse.getCompany().getId());
 
-        return warehouseStockRepository.findByWarehouseIdOrderByProductId(warehouse.getId()).stream()
+        return warehouseStockRepository
+                .findByWarehouseIdAndProduct_DeletedFalseOrderByProductId(warehouse.getId()).stream()
                 .filter(s -> s.getQuantity() != null && s.getQuantity() > 0)
                 // Les produits soft-supprimés ne doivent plus apparaître dans le
                 // contenu (RG-04) : leurs lignes de stock par entrepôt peuvent
                 // subsister en base après la suppression logique.
-                .filter(s -> !s.getProduct().isDeleted())
                 .map(s -> {
                     Product product = s.getProduct();
                     return WarehouseContentLineResponse.builder()
@@ -329,7 +330,10 @@ public class WarehouseService {
     }
 
     private WarehouseResponse toResponse(Warehouse warehouse, Long companyId) {
-        int total = warehouseStockRepository.findByWarehouseIdOrderByProductId(warehouse.getId()).stream()
+        // Total cohérent avec le contenu affiché : hors produits soft-supprimés
+        // (RG-04), dont les lignes de stock peuvent subsister en base.
+        int total = warehouseStockRepository
+                .findByWarehouseIdAndProduct_DeletedFalseOrderByProductId(warehouse.getId()).stream()
                 .mapToInt(WarehouseStock::getQuantity)
                 .sum();
         return WarehouseResponse.builder()
