@@ -6,9 +6,11 @@ import com.stock.api.dto.StockMovementTotalsResponse;
 import com.stock.api.entity.Product;
 import com.stock.api.entity.StockMovement;
 import com.stock.api.entity.StockMovement.MovementType;
+import com.stock.api.entity.Supplier;
 import com.stock.api.entity.User;
 import com.stock.api.repository.ProductRepository;
 import com.stock.api.repository.StockMovementRepository;
+import com.stock.api.repository.SupplierRepository;
 import com.stock.api.repository.UserRepository;
 import com.stock.api.repository.WarehouseRepository;
 import com.stock.api.repository.WarehouseStockRepository;
@@ -43,6 +45,7 @@ public class StockMovementService {
     private final UserRepository userRepository;
     private final WarehouseRepository warehouseRepository;
     private final WarehouseStockRepository warehouseStockRepository;
+    private final SupplierRepository supplierRepository;
 
     /**
      * US-08 : Historique paginé des mouvements d'un produit.
@@ -60,10 +63,11 @@ public class StockMovementService {
     }
 
     /**
-     * US-08 : Historique filtrable (produit, type, dates).
+     * US-08 : Historique filtrable (produit, type, dates, fournisseur).
      */
     @Transactional(readOnly = true)
     public Page<StockMovementResponse> findByFilters(Long productId, MovementType type,
+                                                      Long supplierId,
                                                       LocalDateTime fromDate, LocalDateTime toDate,
                                                       Pageable pageable) {
         Specification<StockMovement> spec = (root, query, cb) -> {
@@ -73,6 +77,9 @@ public class StockMovementService {
             }
             if (type != null) {
                 predicates.add(cb.equal(root.get("type"), type));
+            }
+            if (supplierId != null) {
+                predicates.add(cb.equal(root.get("supplier").get("id"), supplierId));
             }
             if (fromDate != null) {
                 predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), fromDate));
@@ -152,6 +159,24 @@ public class StockMovementService {
             }
         }
 
+        // Fournisseur du réapprovisionnement (story 2.2) : optionnel,
+        // réservé aux entrées, rattaché à l'entreprise du token.
+        Supplier supplier = null;
+        if (request.getSupplierId() != null) {
+            if (request.getType() != MovementType.ENTRY) {
+                throw new BusinessRuleException(
+                        "Le fournisseur ne peut être renseigné que sur une entrée de stock.");
+            }
+            supplier = supplierRepository.findById(request.getSupplierId())
+                    .orElseThrow(() -> new BusinessRuleException(
+                            "Fournisseur non trouvé avec l'id: " + request.getSupplierId()));
+            if (supplier.isDeleted()) {
+                throw new BusinessRuleException(
+                        "Fournisseur « " + supplier.getName() + " » supprimé.");
+            }
+            TenantGuard.assertSameCompany(supplier.getCompanyId());
+        }
+
         // Créer le mouvement
         StockMovement movement = StockMovement.builder()
                 .type(request.getType())
@@ -161,6 +186,7 @@ public class StockMovementService {
                 .performedBy(user)
                 .companyId(companyId)
                 .warehouse(warehouse)
+                .supplier(supplier)
                 .build();
 
         movement = stockMovementRepository.save(movement);
@@ -235,6 +261,8 @@ public class StockMovementService {
                 .performedById(movement.getPerformedBy().getId())
                 .performedByEmail(movement.getPerformedBy().getEmail())
                 .orderId(movement.getOrder() != null ? movement.getOrder().getId() : null)
+                .supplierId(movement.getSupplier() != null ? movement.getSupplier().getId() : null)
+                .supplierName(movement.getSupplier() != null ? movement.getSupplier().getName() : null)
                 .createdAt(movement.getCreatedAt())
                 .build();
     }

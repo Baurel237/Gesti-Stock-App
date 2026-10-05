@@ -23,5 +23,10 @@ public class StockMovementResponse {
     private Long performedById;
     private String performedByEmail;
     private Long orderId;
+
+    /** Fournisseur du réapprovisionnement (story 2.2) — null si absent. */
+    private Long supplierId;
+    private String supplierName;
+
     private LocalDateTime createdAt;
 }

@@ -20,6 +20,12 @@ public class StockMovementRequest {
      */
     private Long warehouseId;
 
+    /**
+     * Fournisseur du réapprovisionnement (OPTIONNEL, story 2.2) — réservé
+     * aux entrées (ENTRY) ; doit appartenir à l'entreprise du token.
+     */
+    private Long supplierId;
+
     @NotNull(message = "Le type de mouvement est obligatoire")
     private MovementType type;
 

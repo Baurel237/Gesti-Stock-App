@@ -86,16 +86,17 @@ public class StockMovementController {
     @GetMapping("/filters")
     @PreAuthorize("isAuthenticated()")
     @Operation(summary = "Historique filtré des mouvements",
-               description = "Retourne l'historique filtré par produit, type et dates")
+               description = "Retourne l'historique filtré par produit, type, fournisseur et dates")
     @ApiResponse(responseCode = "200", description = "Historique filtré retourné")
     public ResponseEntity<Page<StockMovementResponse>> findByFilters(
             @Parameter(description = "ID du produit") @RequestParam(required = false) Long productId,
             @Parameter(description = "Type de mouvement (ENTRY/EXIT)") @RequestParam(required = false) MovementType type,
+            @Parameter(description = "ID du fournisseur (story 2.2)") @RequestParam(required = false) Long supplierId,
             @Parameter(description = "Date de début") @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fromDate,
             @Parameter(description = "Date de fin") @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime toDate,
             Pageable pageable) {
-        return ResponseEntity.ok(stockMovementService.findByFilters(productId, type, fromDate, toDate, pageable));
+        return ResponseEntity.ok(stockMovementService.findByFilters(productId, type, supplierId, fromDate, toDate, pageable));
     }
 }

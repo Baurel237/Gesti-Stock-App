@@ -69,6 +69,14 @@ public class StockMovement {
     @JoinColumn(name = "warehouse_id")
     private Warehouse warehouse;
 
+    /**
+     * Fournisseur du réapprovisionnement (story 2.2) — renseigné sur les
+     * entrées, null pour les sorties et les mouvements historiques.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "supplier_id")
+    private Supplier supplier;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
