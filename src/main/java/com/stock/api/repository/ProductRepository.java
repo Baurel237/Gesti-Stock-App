@@ -4,6 +4,7 @@ import com.stock.api.entity.Product;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -29,16 +30,30 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     @Query(value = "SELECT * FROM products p WHERE p.deleted = false " +
             "AND (:companyId IS NULL OR p.company_id = :companyId) " +
             "AND (:categoryId IS NULL OR p.category_id = :categoryId) " +
+            "AND (:supplierId IS NULL OR EXISTS (SELECT 1 FROM product_suppliers ps " +
+            "     WHERE ps.product_id = p.id AND ps.supplier_id = :supplierId)) " +
             "AND (:name IS NULL OR LOWER(p.name) LIKE '%' || LOWER(CAST(:name AS text)) || '%')",
             countQuery = "SELECT COUNT(*) FROM products p WHERE p.deleted = false " +
             "AND (:companyId IS NULL OR p.company_id = :companyId) " +
             "AND (:categoryId IS NULL OR p.category_id = :categoryId) " +
+            "AND (:supplierId IS NULL OR EXISTS (SELECT 1 FROM product_suppliers ps " +
+            "     WHERE ps.product_id = p.id AND ps.supplier_id = :supplierId)) " +
             "AND (:name IS NULL OR LOWER(p.name) LIKE '%' || LOWER(CAST(:name AS text)) || '%')",
             nativeQuery = true)
     Page<Product> findByFilters(@Param("companyId") Long companyId,
                                 @Param("categoryId") Long categoryId,
+                                @Param("supplierId") Long supplierId,
                                 @Param("name") String name,
                                 Pageable pageable);
+
+    /**
+     * Stories 2.3/2.4 : dé-lie un fournisseur (supprimé logiquement) de tous
+     * les produits — ses produits redeviennent visibles sous « Tous les
+     * fournisseurs » et n'apparaissent plus dans les sélecteurs.
+     */
+    @Modifying
+    @Query(value = "DELETE FROM product_suppliers WHERE supplier_id = :supplierId", nativeQuery = true)
+    void unlinkSupplier(@Param("supplierId") Long supplierId);
 
     Optional<Product> findByIdAndDeletedFalse(Long id);
 

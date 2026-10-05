@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -25,6 +26,10 @@ public class ProductResponse {
     private boolean lowStock;
     private Long categoryId;
     private String categoryName;
+
+    /** Fournisseurs du produit (stories 2.3/2.4) — vide si aucun. */
+    private List<Long> supplierIds;
+
     private boolean deleted;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

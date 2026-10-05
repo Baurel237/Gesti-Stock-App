@@ -6,6 +6,8 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Entité représentant un produit dans le stock.
@@ -70,6 +72,18 @@ public class Product {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "category_id", nullable = false)
     private Category category;
+
+    /**
+     * Fournisseurs du produit (stories 2.3/2.4) — many-to-many via
+     * product_suppliers. VIDE = produit sans fournisseur (comportement
+     * historique inchangé).
+     */
+    @Builder.Default
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(name = "product_suppliers",
+            joinColumns = @JoinColumn(name = "product_id"),
+            inverseJoinColumns = @JoinColumn(name = "supplier_id"))
+    private Set<Supplier> suppliers = new HashSet<>();
 
     /** Entrepropriétaire (V2 multi-entreprises) — isolation des données. */
     @Column(name = "company_id", nullable = false)

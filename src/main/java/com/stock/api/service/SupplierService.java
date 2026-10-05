@@ -3,6 +3,7 @@ package com.stock.api.service;
 import com.stock.api.dto.SupplierRequest;
 import com.stock.api.dto.SupplierResponse;
 import com.stock.api.entity.Supplier;
+import com.stock.api.repository.ProductRepository;
 import com.stock.api.repository.SupplierRepository;
 import com.stock.api.tenant.TenantContext;
 import com.stock.api.tenant.TenantGuard;
@@ -21,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class SupplierService {
 
     private final SupplierRepository supplierRepository;
+    private final ProductRepository productRepository;
     private final AuditService auditService;
 
     /**
@@ -86,6 +88,10 @@ public class SupplierService {
     /**
      * Suppression logique (RG-04) : le fournisseur reste en base pour
      * l'historique mais disparaît des listes et des sélecteurs.
+     * Story 2.3 : ses associations aux produits sont retirées (join
+     * product_suppliers) — ses produits redeviennent visibles sous
+     * « Tous les fournisseurs » ; les mouvements passés (story 2.2,
+     * supplier_id sur stock_movements) ne sont pas affectés.
      */
     @Transactional
     public void delete(Long id) {
@@ -93,6 +99,7 @@ public class SupplierService {
 
         supplier.setDeleted(true);
         supplierRepository.save(supplier);
+        productRepository.unlinkSupplier(id);
         auditService.record("DELETE", "Supplier", supplier.getId(), supplier.getName(),
                 "Fournisseur supprimé (suppression logique)");
     }

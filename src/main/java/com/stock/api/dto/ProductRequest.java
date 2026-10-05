@@ -7,11 +7,12 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@Builder(toBuilder = true)
 public class ProductRequest {
 
     @NotBlank(message = "Le nom du produit est obligatoire")
@@ -37,4 +38,11 @@ public class ProductRequest {
 
     @Min(value = 0, message = "Le seuil d'alerte ne peut pas être négatif")
     private Integer alertThreshold;
+
+    /**
+     * Fournisseurs du produit (OPTIONNEL, story 2.3) — ids de fournisseurs
+     * actifs de la société du produit. null = inchangé en mise à jour ;
+     * liste vide = retirer tous les fournisseurs.
+     */
+    private List<Long> supplierIds;
 }

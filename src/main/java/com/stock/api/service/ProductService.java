@@ -4,8 +4,11 @@ import com.stock.api.dto.ProductRequest;
 import com.stock.api.dto.ProductResponse;
 import com.stock.api.entity.Category;
 import com.stock.api.entity.Product;
+import com.stock.api.entity.Supplier;
+import com.stock.api.exception.BusinessRuleException;
 import com.stock.api.repository.CategoryRepository;
 import com.stock.api.repository.ProductRepository;
+import com.stock.api.repository.SupplierRepository;
 import com.stock.api.tenant.TenantContext;
 import com.stock.api.tenant.TenantGuard;
 import lombok.RequiredArgsConstructor;
@@ -14,7 +17,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Service de gestion des produits (US-05, US-06).
@@ -27,15 +33,66 @@ public class ProductService {
 
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
+    private final SupplierRepository supplierRepository;
 
     /**
      * US-06 : Liste paginée des produits actifs avec filtres.
      * V2 : tout utilisateur non-plateforme ne voit que les produits de son entreprise.
+     * Story 2.4 : filtre facultatif par fournisseur — un fournisseur inconnu,
+     * supprimé ou d'une autre société est refusé (aucune fuite de données).
      */
     @Transactional(readOnly = true)
-    public Page<ProductResponse> findAll(Long categoryId, String name, Pageable pageable) {
-        return productRepository.findByFilters(TenantContext.getCompanyId(), categoryId, name, pageable)
+    public Page<ProductResponse> findAll(Long categoryId, String name, Long supplierId, Pageable pageable) {
+        Long checkedSupplierId = validateSupplierFilter(supplierId);
+        return productRepository.findByFilters(TenantContext.getCompanyId(), categoryId, checkedSupplierId, name, pageable)
                 .map(this::toResponse);
+    }
+
+    /** Story 2.4 : le fournisseur du filtre doit exister, être actif et
+     *  appartenir à la portée du jeton. */
+    private Long validateSupplierFilter(Long supplierId) {
+        if (supplierId == null) {
+            return null;
+        }
+        Supplier supplier = supplierRepository.findById(supplierId)
+                .orElseThrow(() -> new BusinessRuleException(
+                        "Fournisseur non trouvé avec l'id: " + supplierId));
+        TenantGuard.assertSameCompany(supplier.getCompanyId());
+        if (supplier.isDeleted()) {
+            throw new BusinessRuleException(
+                    "Fournisseur « " + supplier.getName() + " » supprimé.");
+        }
+        return supplierId;
+    }
+
+    /**
+     * Story 2.3 : résout et valide les fournisseurs d'un produit — actifs,
+     * existants, tous de la même entreprise que le produit. Dédoublonné en
+     * conservant l'ordre de la requête (le premier = fournisseur principal).
+     *
+     * @return null si supplierIds est null (mise à jour : inchangé)
+     */
+    private Set<Supplier> resolveSuppliers(List<Long> supplierIds, Long companyId) {
+        if (supplierIds == null) {
+            return null;
+        }
+        Set<Supplier> suppliers = new LinkedHashSet<>();
+        for (Long id : new LinkedHashSet<>(supplierIds)) {
+            Supplier supplier = supplierRepository.findById(id)
+                    .orElseThrow(() -> new BusinessRuleException(
+                            "Fournisseur non trouvé avec l'id: " + id));
+            if (supplier.isDeleted()) {
+                throw new BusinessRuleException(
+                        "Fournisseur « " + supplier.getName() + " » supprimé.");
+            }
+            if (!Objects.equals(supplier.getCompanyId(), companyId)) {
+                throw new BusinessRuleException("Le fournisseur « " + supplier.getName()
+                        + " » n'appartient pas à la même entreprise que le produit.");
+            }
+            TenantGuard.assertSameCompany(supplier.getCompanyId());
+            suppliers.add(supplier);
+        }
+        return suppliers;
     }
 
     /**
@@ -84,6 +141,10 @@ public class ProductService {
         }
         TenantGuard.assertSameCompany(category.getCompanyId());
 
+        // Story 2.3 : fournisseurs optionnels — validés contre l'entreprise
+        // du produit (héritée de sa catégorie).
+        Set<Supplier> suppliers = resolveSuppliers(request.getSupplierIds(), category.getCompanyId());
+
         Product product = Product.builder()
                 .name(request.getName())
                 .description(request.getDescription())
@@ -93,6 +154,7 @@ public class ProductService {
                 .alertThreshold(request.getAlertThreshold() != null ? request.getAlertThreshold() : 10)
                 .category(category)
                 .companyId(category.getCompanyId())
+                .suppliers(suppliers != null ? suppliers : new LinkedHashSet<>())
                 .build();
 
         product = productRepository.save(product);
@@ -143,6 +205,13 @@ public class ProductService {
         product.setAlertThreshold(request.getAlertThreshold() != null ? request.getAlertThreshold() : product.getAlertThreshold());
         product.setCategory(category);
 
+        // Story 2.3 : supplierIds null = inchangé ; liste (même vide) = remplacement.
+        Set<Supplier> suppliers = resolveSuppliers(request.getSupplierIds(), product.getCompanyId());
+        if (suppliers != null) {
+            product.getSuppliers().clear();
+            product.getSuppliers().addAll(suppliers);
+        }
+
         product = productRepository.save(product);
         return toResponse(product);
     }
@@ -179,6 +248,7 @@ public class ProductService {
                 .lowStock(product.getQuantity() <= product.getAlertThreshold())
                 .categoryId(product.getCategory().getId())
                 .categoryName(product.getCategory().getName())
+                .supplierIds(product.getSuppliers().stream().map(Supplier::getId).sorted().toList())
                 .deleted(product.isDeleted())
                 .createdAt(product.getCreatedAt())
                 .updatedAt(product.getUpdatedAt())

@@ -40,13 +40,14 @@ public class ProductController {
      */
     @GetMapping
     @Operation(summary = "Lister les produits",
-               description = "Retourne la liste paginée des produits avec filtres optionnels (categoryId, name)")
+               description = "Retourne la liste paginée des produits avec filtres optionnels (categoryId, supplierId, name)")
     @ApiResponse(responseCode = "200", description = "Liste retournée avec succès")
     public ResponseEntity<Page<ProductResponse>> findAll(
             @Parameter(description = "ID de la catégorie") @RequestParam(required = false) Long categoryId,
+            @Parameter(description = "ID du fournisseur (story 2.4)") @RequestParam(required = false) Long supplierId,
             @Parameter(description = "Nom du produit (recherche partielle)") @RequestParam(required = false) String name,
             Pageable pageable) {
-        return ResponseEntity.ok(productService.findAll(categoryId, name, pageable));
+        return ResponseEntity.ok(productService.findAll(categoryId, name, supplierId, pageable));
     }
 
     /**
