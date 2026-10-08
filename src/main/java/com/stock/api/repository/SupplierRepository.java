@@ -20,7 +20,7 @@ public interface SupplierRepository extends JpaRepository<Supplier, Long> {
      */
     @Query("SELECT s FROM Supplier s WHERE s.deleted = false " +
            "AND (:companyId IS NULL OR s.companyId = :companyId) " +
-           "AND (:search IS NULL OR LOWER(s.name) LIKE LOWER(CONCAT('%', :search, '%')))")
+           "AND (:search IS NULL OR LOWER(s.name) LIKE '%' || LOWER(CAST(:search AS text)) || '%')")
     Page<Supplier> findByFilters(@Param("companyId") Long companyId,
                                  @Param("search") String search,
                                  Pageable pageable);
