@@ -30,6 +30,9 @@ public class ProductResponse {
     /** Fournisseurs du produit (stories 2.3/2.4) — vide si aucun. */
     private List<Long> supplierIds;
 
+    /** Noms des fournisseurs, dans l'ordre de rattachement (affichage détail). */
+    private List<String> supplierNames;
+
     private boolean deleted;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

@@ -2,6 +2,7 @@ package com.stock.api.repository;
 
 import com.stock.api.entity.Order;
 import com.stock.api.entity.Order.OrderStatus;
+import com.stock.api.entity.Order.OrderType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -23,10 +24,12 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     @Query("SELECT o FROM Order o WHERE " +
             "(:companyId IS NULL OR o.companyId = :companyId) " +
             "AND (:status IS NULL OR o.status = :status) " +
+            "AND (:orderType IS NULL OR o.orderType = :orderType) " +
             "AND (:createdById IS NULL OR o.createdBy.id = :createdById) " +
             "ORDER BY o.createdAt DESC")
     Page<Order> findByFilters(@Param("companyId") Long companyId,
                                @Param("status") OrderStatus status,
+                               @Param("orderType") OrderType orderType,
                                @Param("createdById") Long createdById,
                                Pageable pageable);
 

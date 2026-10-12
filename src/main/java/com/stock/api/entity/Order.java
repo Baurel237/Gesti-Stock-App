@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,6 +26,47 @@ public class Order {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    /**
+     * Type de commande (V10) :
+     * - STANDARD : historique (sortie à la validation, aucun champ lié)
+     * - PURCHASE : commande fournisseur — les produits ENTRENT en stock
+     *   à la validation et le fournisseur est obligatoire
+     * - CLIENT   : commande client (vendeur) — nom du client + date de
+     *   livraison obligatoires, stock sorti après validation admin
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "order_type", nullable = false, length = 20)
+    @Builder.Default
+    private OrderType orderType = OrderType.STANDARD;
+
+    /**
+     * Fournisseur de la commande (PURCHASE) — null pour les autres types.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "supplier_id")
+    private Supplier supplier;
+
+    /**
+     * Nom du client d'une commande CLIENT (vendeur).
+     */
+    @Column(length = 100)
+    private String clientName;
+
+    /**
+     * Entrepôt / boutique d'origine de la commande (V11).
+     * Pour un vendeur affecté à un entrepôt : résolu automatiquement à la création.
+     * Servi sur le ticket de commande.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "warehouse_id")
+    private Warehouse warehouse;
+
+    /**
+     * Date de livraison souhaitée d'une commande CLIENT.
+     */
+    @Column
+    private LocalDate deliveryDate;
 
     @Column(nullable = false, unique = true, length = 50)
     private String reference;
@@ -127,6 +169,22 @@ public class Order {
         private final String description;
 
         OrderStatus(String description) {
+            this.description = description;
+        }
+
+        public String getDescription() {
+            return description;
+        }
+    }
+
+    public enum OrderType {
+        STANDARD("Commande standard"),
+        PURCHASE("Commande fournisseur"),
+        CLIENT("Commande client");
+
+        private final String description;
+
+        OrderType(String description) {
             this.description = description;
         }
 

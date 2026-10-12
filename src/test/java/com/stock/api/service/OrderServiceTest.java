@@ -5,11 +5,16 @@ import com.stock.api.dto.OrderRequest;
 import com.stock.api.dto.OrderResponse;
 import com.stock.api.entity.Order;
 import com.stock.api.entity.Order.OrderStatus;
+import com.stock.api.entity.Order.OrderType;
 import com.stock.api.entity.Product;
+import com.stock.api.entity.Role;
+import com.stock.api.entity.Supplier;
 import com.stock.api.entity.User;
+import com.stock.api.exception.BusinessRuleException;
 import com.stock.api.repository.OrderRepository;
 import com.stock.api.repository.ProductRepository;
 import com.stock.api.repository.StockMovementRepository;
+import com.stock.api.repository.SupplierRepository;
 import com.stock.api.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -21,6 +26,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -47,6 +53,9 @@ class OrderServiceTest {
 
     @Mock
     private StockMovementRepository stockMovementRepository;
+
+    @Mock
+    private SupplierRepository supplierRepository;
 
     @InjectMocks
     private OrderService orderService;
@@ -346,8 +355,10 @@ class OrderServiceTest {
         }
 
         @Test
-        @DisplayName("Annulation d'une commande validée → succès + restitution stock")
+        @DisplayName("Annulation d'une commande validée par un profil de gestion → succès + restitution stock")
         void cancel_validatedOrder_success() {
+            // L'annulation d'une commande déjà validée est réservée aux profils de gestion (V10-US).
+            user.setRoles(Collections.singleton(Role.ADMIN));
             Order order = Order.builder()
                     .id(1L)
                     .reference("CMD-005")
@@ -437,6 +448,411 @@ class OrderServiceTest {
 
             assertThrows(IllegalStateException.class,
                     () -> order.transitionTo(OrderStatus.PENDING));
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // V10 — types de commande (PURCHASE / CLIENT)
+    // ═══════════════════════════════════════════════════════
+    @Nested
+    @DisplayName("V10 — commande fournisseur (PURCHASE) et commande client (CLIENT)")
+    class OrderTypeTests {
+
+        private User admin() {
+            return User.builder()
+                    .id(2L)
+                    .email("admin@test.com")
+                    .roles(Collections.singleton(Role.ADMIN))
+                    .build();
+        }
+
+        private User seller() {
+            return User.builder()
+                    .id(3L)
+                    .email("seller@test.com")
+                    .roles(Collections.singleton(Role.SELLER))
+                    .build();
+        }
+
+        @Test
+        @DisplayName("Commande PURCHASE sans fournisseur → BusinessRuleException")
+        void create_purchase_withoutSupplier_throwsException() {
+            when(userRepository.findByEmail("admin@test.com")).thenReturn(Optional.of(admin()));
+
+            OrderRequest request = OrderRequest.builder()
+                    .type(OrderType.PURCHASE)
+                    .lines(List.of(OrderLineRequest.builder().productId(1L).quantity(5).build()))
+                    .build();
+
+            assertThrows(BusinessRuleException.class,
+                    () -> orderService.create(request, "admin@test.com"));
+        }
+
+        @Test
+        @DisplayName("Commande PURCHASE par un vendeur seul → refusée")
+        void create_purchase_bySeller_throwsException() {
+            when(userRepository.findByEmail("seller@test.com")).thenReturn(Optional.of(seller()));
+
+            OrderRequest request = OrderRequest.builder()
+                    .type(OrderType.PURCHASE)
+                    .supplierId(10L)
+                    .lines(List.of(OrderLineRequest.builder().productId(1L).quantity(5).build()))
+                    .build();
+
+            assertThrows(BusinessRuleException.class,
+                    () -> orderService.create(request, "seller@test.com"));
+        }
+
+        @Test
+        @DisplayName("Commande PURCHASE avec fournisseur valide → succès")
+        void create_purchase_withSupplier_success() {
+            when(userRepository.findByEmail("admin@test.com")).thenReturn(Optional.of(admin()));
+            Supplier supplier = Supplier.builder()
+                    .id(10L)
+                    .name("Distrib Plus")
+                    .deleted(false)
+                    .build();
+            when(supplierRepository.findById(10L)).thenReturn(Optional.of(supplier));
+            when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+            when(orderRepository.save(any())).thenAnswer(inv -> {
+                Order order = inv.getArgument(0);
+                order.setId(1L);
+                return order;
+            });
+
+            OrderRequest request = OrderRequest.builder()
+                    .type(OrderType.PURCHASE)
+                    .supplierId(10L)
+                    .lines(List.of(OrderLineRequest.builder().productId(1L).quantity(5).build()))
+                    .build();
+
+            OrderResponse response = orderService.create(request, "admin@test.com");
+
+            assertEquals(OrderType.PURCHASE, response.getType());
+            assertEquals(10L, response.getSupplierId());
+            assertEquals("Distrib Plus", response.getSupplierName());
+        }
+
+        @Test
+        @DisplayName("Commande CLIENT sans nom de client → BusinessRuleException")
+        void create_client_withoutClientName_throwsException() {
+            when(userRepository.findByEmail("seller@test.com")).thenReturn(Optional.of(seller()));
+
+            OrderRequest request = OrderRequest.builder()
+                    .type(OrderType.CLIENT)
+                    .deliveryDate(LocalDate.now().plusDays(2))
+                    .lines(List.of(OrderLineRequest.builder().productId(1L).quantity(1).build()))
+                    .build();
+
+            assertThrows(BusinessRuleException.class,
+                    () -> orderService.create(request, "seller@test.com"));
+        }
+
+        @Test
+        @DisplayName("Commande CLIENT sans date de livraison → BusinessRuleException")
+        void create_client_withoutDeliveryDate_throwsException() {
+            when(userRepository.findByEmail("seller@test.com")).thenReturn(Optional.of(seller()));
+
+            OrderRequest request = OrderRequest.builder()
+                    .type(OrderType.CLIENT)
+                    .clientName("Client Test")
+                    .lines(List.of(OrderLineRequest.builder().productId(1L).quantity(1).build()))
+                    .build();
+
+            assertThrows(BusinessRuleException.class,
+                    () -> orderService.create(request, "seller@test.com"));
+        }
+
+        @Test
+        @DisplayName("Commande CLIENT avec date de livraison dans le passé → BusinessRuleException")
+        void create_client_pastDeliveryDate_throwsException() {
+            when(userRepository.findByEmail("seller@test.com")).thenReturn(Optional.of(seller()));
+
+            OrderRequest request = OrderRequest.builder()
+                    .type(OrderType.CLIENT)
+                    .clientName("Client Test")
+                    .deliveryDate(LocalDate.now().minusDays(1))
+                    .lines(List.of(OrderLineRequest.builder().productId(1L).quantity(1).build()))
+                    .build();
+
+            assertThrows(BusinessRuleException.class,
+                    () -> orderService.create(request, "seller@test.com"));
+        }
+
+        @Test
+        @DisplayName("Commande CLIENT livrée aujourd'hui → acceptée")
+        void create_client_todayDeliveryDate_accepted() {
+            when(userRepository.findByEmail("seller@test.com")).thenReturn(Optional.of(seller()));
+            when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+            when(orderRepository.save(any())).thenAnswer(inv -> {
+                Order order = inv.getArgument(0);
+                order.setId(1L);
+                return order;
+            });
+
+            OrderRequest request = OrderRequest.builder()
+                    .type(OrderType.CLIENT)
+                    .clientName("Client Aujourd'hui")
+                    .deliveryDate(LocalDate.now())
+                    .lines(List.of(OrderLineRequest.builder().productId(1L).quantity(1).build()))
+                    .build();
+
+            OrderResponse response = orderService.create(request, "seller@test.com");
+
+            assertEquals(OrderStatus.PENDING, response.getStatus());
+            assertEquals(LocalDate.now(), response.getDeliveryDate());
+        }
+
+        @Test
+        @DisplayName("Commande CLIENT valide → PENDING avec client et date de livraison")
+        void create_client_success() {
+            when(userRepository.findByEmail("seller@test.com")).thenReturn(Optional.of(seller()));
+            when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+            when(orderRepository.save(any())).thenAnswer(inv -> {
+                Order order = inv.getArgument(0);
+                order.setId(1L);
+                return order;
+            });
+
+            LocalDate delivery = LocalDate.now().plusDays(3);
+            OrderRequest request = OrderRequest.builder()
+                    .type(OrderType.CLIENT)
+                    .clientName("M. Koffi")
+                    .deliveryDate(delivery)
+                    .lines(List.of(OrderLineRequest.builder().productId(1L).quantity(2).build()))
+                    .build();
+
+            OrderResponse response = orderService.create(request, "seller@test.com");
+
+            assertEquals(OrderStatus.PENDING, response.getStatus());
+            assertEquals(OrderType.CLIENT, response.getType());
+            assertEquals("M. Koffi", response.getClientName());
+            assertEquals(delivery, response.getDeliveryDate());
+        }
+
+        @Test
+        @DisplayName("Validation d'une commande PURCHASE → entrée de stock (quantité ajoutée)")
+        void validate_purchase_addsStock() {
+            Order order = Order.builder()
+                    .id(1L)
+                    .reference("CMD-PURCHASE")
+                    .status(OrderStatus.PENDING)
+                    .createdBy(user)
+                    .orderType(OrderType.PURCHASE)
+                    .build();
+
+            var line = new com.stock.api.entity.OrderLine();
+            line.setProduct(product);
+            line.setQuantity(5);
+            line.setUnitPrice(BigDecimal.valueOf(29.99));
+            line.setSubtotal(BigDecimal.valueOf(149.95));
+            order.setLines(List.of(line));
+
+            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+            when(userRepository.findByEmail("user@test.com")).thenReturn(Optional.of(user));
+            when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(productRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            OrderResponse response = orderService.validate(1L, "user@test.com");
+
+            assertEquals(OrderStatus.VALIDATED, response.getStatus());
+            assertEquals(15, product.getQuantity(),
+                    "Une commande fournisseur validée ajoute la quantité au stock (10 + 5 = 15)");
+        }
+
+        @Test
+        @DisplayName("Annulation d'une commande PURCHASE validée (profil de gestion) → stock retiré")
+        void cancel_validatedPurchase_removesStock() {
+            // L'annulation d'une commande déjà validée est réservée aux profils de gestion (V10-US).
+            user.setRoles(Collections.singleton(Role.ADMIN));
+            Order order = Order.builder()
+                    .id(1L)
+                    .reference("CMD-PURCHASE-2")
+                    .status(OrderStatus.VALIDATED)
+                    .createdBy(user)
+                    .orderType(OrderType.PURCHASE)
+                    .build();
+
+            var line = new com.stock.api.entity.OrderLine();
+            line.setProduct(product);
+            line.setQuantity(4);
+            line.setUnitPrice(BigDecimal.valueOf(29.99));
+            line.setSubtotal(BigDecimal.valueOf(119.96));
+            order.setLines(List.of(line));
+
+            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+            when(userRepository.findByEmail("user@test.com")).thenReturn(Optional.of(user));
+            when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(productRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            OrderResponse response = orderService.cancel(1L, "user@test.com");
+
+            assertEquals(OrderStatus.CANCELLED, response.getStatus());
+            assertEquals(6, product.getQuantity(),
+                    "L'annulation retire les quantités entrées (10 - 4 = 6)");
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // V10-US vendeur : modification et annulation de sa commande
+    // ═══════════════════════════════════════════════════════
+    @Nested
+    @DisplayName("V10-US — modification/annulation par le créateur (vendeur)")
+    class SellerOrderTests {
+
+        private User sellerCreator() {
+            return User.builder()
+                    .id(3L)
+                    .email("seller@test.com")
+                    .roles(Collections.singleton(Role.SELLER))
+                    .build();
+        }
+
+        private User otherSeller() {
+            return User.builder()
+                    .id(4L)
+                    .email("other@test.com")
+                    .roles(Collections.singleton(Role.SELLER))
+                    .build();
+        }
+
+        private Order pendingClientOrder(User creator) {
+            Order order = Order.builder()
+                    .id(1L)
+                    .reference("CMD-CLIENT-1")
+                    .status(OrderStatus.PENDING)
+                    .createdBy(creator)
+                    .orderType(OrderType.CLIENT)
+                    .clientName("Client initial")
+                    .deliveryDate(LocalDate.now().plusDays(5))
+                    .companyId(1L)
+                    .build();
+            var line = new com.stock.api.entity.OrderLine();
+            line.setProduct(product);
+            line.setQuantity(2);
+            line.setUnitPrice(BigDecimal.valueOf(29.99));
+            line.setSubtotal(BigDecimal.valueOf(59.98));
+            order.setLines(new java.util.ArrayList<>(List.of(line)));
+            return order;
+        }
+
+        @Test
+        @DisplayName("Le créateur modifie sa commande PENDING → client/date/lignes mises à jour")
+        void update_byCreator_pending_success() {
+            Order order = pendingClientOrder(sellerCreator());
+            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+            when(userRepository.findByEmail("seller@test.com")).thenReturn(Optional.of(sellerCreator()));
+            when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+            when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            OrderRequest request = OrderRequest.builder()
+                    .type(OrderType.CLIENT)
+                    .clientName("Nouveau client")
+                    .deliveryDate(LocalDate.now().plusDays(10))
+                    .lines(List.of(OrderLineRequest.builder().productId(1L).quantity(7).build()))
+                    .notes("Note à jour")
+                    .build();
+
+            OrderResponse response = orderService.update(1L, request, "seller@test.com");
+
+            assertEquals("Nouveau client", response.getClientName());
+            assertEquals(LocalDate.now().plusDays(10), response.getDeliveryDate());
+            assertEquals(1, response.getLines().size());
+            assertEquals(7, response.getLines().get(0).getQuantity());
+            assertEquals(0, product.getPrice().multiply(BigDecimal.valueOf(7)).compareTo(response.getTotalAmount()));
+            assertEquals("Note à jour", response.getNotes());
+        }
+
+        @Test
+        @DisplayName("Un vendeur qui n'est pas le créateur → BusinessRuleException")
+        void update_byOtherSeller_throwsException() {
+            Order order = pendingClientOrder(sellerCreator());
+            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+            when(userRepository.findByEmail("other@test.com")).thenReturn(Optional.of(otherSeller()));
+
+            OrderRequest request = OrderRequest.builder()
+                    .type(OrderType.CLIENT)
+                    .clientName("X")
+                    .deliveryDate(LocalDate.now().plusDays(1))
+                    .lines(List.of(OrderLineRequest.builder().productId(1L).quantity(1).build()))
+                    .build();
+
+            assertThrows(BusinessRuleException.class,
+                    () -> orderService.update(1L, request, "other@test.com"));
+        }
+
+        @Test
+        @DisplayName("Un admin peut modifier la commande d'un autre vendeur (profil de gestion)")
+        void update_byAdmin_otherSellerOrder_success() {
+            Order order = pendingClientOrder(sellerCreator());
+            User admin = User.builder()
+                    .id(9L)
+                    .email("admin@test.com")
+                    .roles(Collections.singleton(Role.ADMIN))
+                    .build();
+            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+            when(userRepository.findByEmail("admin@test.com")).thenReturn(Optional.of(admin));
+            when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+            when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            OrderRequest request = OrderRequest.builder()
+                    .type(OrderType.CLIENT)
+                    .clientName("Client corrigé par admin")
+                    .deliveryDate(LocalDate.now().plusDays(3))
+                    .lines(List.of(OrderLineRequest.builder().productId(1L).quantity(4).build()))
+                    .build();
+
+            OrderResponse response = orderService.update(1L, request, "admin@test.com");
+
+            assertEquals("Client corrigé par admin", response.getClientName());
+            assertEquals(4, response.getLines().get(0).getQuantity());
+        }
+
+        @Test
+        @DisplayName("Modification d'une commande VALIDATED → refusée")
+        void update_validatedOrder_throwsException() {
+            Order order = pendingClientOrder(sellerCreator());
+            order.setStatus(OrderStatus.VALIDATED);
+            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+            when(userRepository.findByEmail("seller@test.com")).thenReturn(Optional.of(sellerCreator()));
+
+            OrderRequest request = OrderRequest.builder()
+                    .type(OrderType.CLIENT)
+                    .clientName("X")
+                    .deliveryDate(LocalDate.now().plusDays(1))
+                    .lines(List.of(OrderLineRequest.builder().productId(1L).quantity(1).build()))
+                    .build();
+
+            assertThrows(IllegalStateException.class,
+                    () -> orderService.update(1L, request, "seller@test.com"));
+        }
+
+        @Test
+        @DisplayName("Le créateur annule sa propre commande PENDING → CANCELLED sans mouvement")
+        void cancel_byCreator_pending_success() {
+            Order order = pendingClientOrder(sellerCreator());
+            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+            when(userRepository.findByEmail("seller@test.com")).thenReturn(Optional.of(sellerCreator()));
+            when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            OrderResponse response = orderService.cancel(1L, "seller@test.com");
+
+            assertEquals(OrderStatus.CANCELLED, response.getStatus());
+            verify(stockMovementRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("Annulation d'une commande VALIDATED par un simple vendeur (non créateur) → refusée")
+        void cancel_validated_byNonCreatorSeller_throwsException() {
+            Order order = pendingClientOrder(sellerCreator());
+            order.setStatus(OrderStatus.VALIDATED);
+            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+            when(userRepository.findByEmail("other@test.com")).thenReturn(Optional.of(otherSeller()));
+
+            assertThrows(BusinessRuleException.class,
+                    () -> orderService.cancel(1L, "other@test.com"));
         }
     }
 }

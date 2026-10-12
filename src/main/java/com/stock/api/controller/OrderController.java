@@ -3,6 +3,7 @@ package com.stock.api.controller;
 import com.stock.api.dto.OrderRequest;
 import com.stock.api.dto.OrderResponse;
 import com.stock.api.entity.Order.OrderStatus;
+import com.stock.api.entity.Order.OrderType;
 import com.stock.api.service.OrderService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -35,13 +36,14 @@ public class OrderController {
      */
     @GetMapping
     @Operation(summary = "Lister les commandes",
-               description = "Retourne la liste paginée des commandes avec filtres optionnels (status, createdById)")
+               description = "Retourne la liste paginée des commandes avec filtres optionnels (status, type, createdById)")
     @ApiResponse(responseCode = "200", description = "Liste retournée")
     public ResponseEntity<Page<OrderResponse>> findAll(
             @Parameter(description = "Statut de la commande") @RequestParam(required = false) OrderStatus status,
+            @Parameter(description = "Type de commande (STANDARD/PURCHASE/CLIENT)") @RequestParam(required = false) OrderType type,
             @Parameter(description = "ID du créateur") @RequestParam(required = false) Long createdById,
             Pageable pageable) {
-        return ResponseEntity.ok(orderService.findAll(status, createdById, pageable));
+        return ResponseEntity.ok(orderService.findAll(status, type, createdById, pageable));
     }
 
     /**
@@ -59,9 +61,11 @@ public class OrderController {
 
     /**
      * US-09 : Création d'une commande multi-lignes.
+     * Le type détermine le comportement (STANDARD : sortie, PURCHASE : entrée
+     * fournisseur, CLIENT : commande vendeur avec client + date de livraison).
      */
     @PostMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'SELLER')")
     @Operation(summary = "Créer une commande",
                description = "Crée une nouvelle commande avec une ou plusieurs lignes. " +
                        "Le montant total est calculé automatiquement.")
@@ -76,12 +80,34 @@ public class OrderController {
     }
 
     /**
+     * V10-US vendeur : modification d'une commande en attente par son créateur
+     * (ou un profil de gestion). Seuls clientName / deliveryDate / lignes / notes.
+     */
+    @PutMapping("/{id}")
+    @Operation(summary = "Modifier une commande",
+               description = "Modifie une commande en attente : nom du client, date de livraison, " +
+                       "lignes et notes (type et fournisseur figés). Réservé au créateur ou aux profils de gestion.")
+    @ApiResponse(responseCode = "200", description = "Commande modifiée")
+    @ApiResponse(responseCode = "403", description = "Ni créateur ni profil de gestion")
+    @ApiResponse(responseCode = "409", description = "Statut non modifiable")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'SELLER')")
+    public ResponseEntity<OrderResponse> update(
+            @Parameter(description = "ID de la commande") @PathVariable Long id,
+            @Valid @RequestBody OrderRequest request,
+            Authentication authentication) {
+        String userEmail = authentication.getName();
+        return ResponseEntity.ok(orderService.update(id, request, userEmail));
+    }
+
+    /**
      * US-10 : Validation d'une commande.
-     * Déclenche les mouvements de sortie de stock.
+     * V10 — impact stock selon le type :
+     * PURCHASE → entrées de stock ; STANDARD/CLIENT → sorties (RG-02).
      */
     @PostMapping("/{id}/validate")
     @Operation(summary = "Valider une commande",
-               description = "Valide une commande en attente et déclenche les sorties de stock. " +
+               description = "Valide une commande en attente : entrées de stock pour une " +
+                       "commande fournisseur, sorties pour une commande interne ou client. " +
                        "RG-02 : rejet si stock insuffisant.")
     @ApiResponse(responseCode = "200", description = "Commande validée")
     @ApiResponse(responseCode = "409", description = "Statut invalide ou stock insuffisant")
@@ -98,10 +124,12 @@ public class OrderController {
      */
     @PostMapping("/{id}/cancel")
     @Operation(summary = "Annuler une commande",
-               description = "Annule une commande en attente")
+               description = "Annule une commande : le créateur peut annuler la sienne tant qu'elle est " +
+                       "en attente ; les profils de gestion peuvent annuler toute commande (avec restitution stock)")
     @ApiResponse(responseCode = "200", description = "Commande annulée")
+    @ApiResponse(responseCode = "403", description = "Ni créateur ni profil de gestion")
     @ApiResponse(responseCode = "409", description = "Statut invalide")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'SELLER')")
     public ResponseEntity<OrderResponse> cancel(
             @Parameter(description = "ID de la commande") @PathVariable Long id,
             Authentication authentication) {

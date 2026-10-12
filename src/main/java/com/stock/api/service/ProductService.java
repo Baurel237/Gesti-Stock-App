@@ -249,6 +249,7 @@ public class ProductService {
                 .categoryId(product.getCategory().getId())
                 .categoryName(product.getCategory().getName())
                 .supplierIds(product.getSuppliers().stream().map(Supplier::getId).sorted().toList())
+                .supplierNames(product.getSuppliers().stream().map(Supplier::getName).toList())
                 .deleted(product.isDeleted())
                 .createdAt(product.getCreatedAt())
                 .updatedAt(product.getUpdatedAt())

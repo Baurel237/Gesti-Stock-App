@@ -129,22 +129,35 @@ public class DataInitializer implements CommandLineRunner {
     @Value("${stock.data-initializer.seed-demo-data:true}")
     private boolean seedDemoDataEnabled;
 
+    /**
+     * Semis des comptes de secours à mots de passe connus (superadmin@mail.com,
+     * vendeur@gmail.com) et de la société « Démo ». Réservé au développement et
+     * à la démonstration : mit à false en production (STOCK_SEED_ACCOUNTS=false),
+     * l'application refuse de démarrer avec ces comptes à mots de passe faibles.
+     */
+    @Value("${stock.data-initializer.seed-accounts:true}")
+    private boolean seedAccountsEnabled;
+
     @Override
     @Transactional
     public void run(String... args) {
         realignUserRoleCheckConstraint();
         realignNameUniqueConstraints();
         ensureSalesTableHasCancellationFields();
-        Company company = getOrCreateDemoCompany();
-        User seller = seedAccounts(company);
-        seedFallbackSuperadmin();
-        seedVendorAccount(company);
-        if (seedDemoDataEnabled) {
-            seedDemoData(seller, company);
-            User seller2 = userRepository.findByEmail("vendeur2@stock.com").orElse(null);
-            seedSecondSellerSales(seller2, company);
+        if (seedAccountsEnabled) {
+            Company company = getOrCreateDemoCompany();
+            User seller = seedAccounts(company);
+            seedFallbackSuperadmin();
+            seedVendorAccount(company);
+            if (seedDemoDataEnabled) {
+                seedDemoData(seller, company);
+                User seller2 = userRepository.findByEmail("vendeur2@stock.com").orElse(null);
+                seedSecondSellerSales(seller2, company);
+            }
+            alignDemoAccountPasswords();
+        } else {
+            log.info("Semis des comptes de démonstration désactivé (stock.data-initializer.seed-accounts=false)");
         }
-        alignDemoAccountPasswords();
     }
 
     /**
