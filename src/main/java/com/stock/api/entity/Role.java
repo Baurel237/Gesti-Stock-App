@@ -6,6 +6,7 @@ import lombok.Getter;
 public enum Role {
     SUPER_ADMIN("Super Administrateur"),
     ADMIN("Administrateur"),
+    WAREHOUSE_ADMIN("Administrateur d'entrepôt"),
     MANAGER("Manager"),
     GESTIONNAIRE("Gestionnaire"),
     SELLER("Vendeur"),

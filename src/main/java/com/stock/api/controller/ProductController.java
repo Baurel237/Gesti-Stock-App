@@ -83,7 +83,7 @@ public class ProductController {
     @ApiResponse(responseCode = "201", description = "Produit créé avec succès")
     @ApiResponse(responseCode = "400", description = "Données invalides")
     @ApiResponse(responseCode = "409", description = "Nom ou référence déjà utilisé")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN', 'MANAGER')")
     public ResponseEntity<ProductResponse> create(@Valid @RequestBody ProductRequest request) {
         ProductResponse response = productService.create(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -98,7 +98,7 @@ public class ProductController {
     @ApiResponse(responseCode = "200", description = "Produit mis à jour")
     @ApiResponse(responseCode = "404", description = "Produit non trouvé")
     @ApiResponse(responseCode = "409", description = "Nom ou référence déjà utilisé")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN', 'MANAGER')")
     public ResponseEntity<ProductResponse> update(
             @Parameter(description = "ID du produit") @PathVariable Long id,
             @Valid @RequestBody ProductRequest request) {
@@ -109,7 +109,7 @@ public class ProductController {
      * Ajout ou remplacement de la photo d'un produit.
      */
     @PutMapping(value = "/{id}/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN', 'MANAGER')")
     public ResponseEntity<ProductResponse> uploadImage(
             @PathVariable Long id,
             @RequestPart("file") MultipartFile file) {
@@ -130,7 +130,7 @@ public class ProductController {
 
     /** Supprime uniquement la photo, sans supprimer le produit. */
     @DeleteMapping("/{id}/image")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN', 'MANAGER')")
     public ResponseEntity<ProductResponse> deleteImage(@PathVariable Long id) {
         productImageService.remove(id);
         return ResponseEntity.ok(productService.findById(id));
@@ -144,7 +144,7 @@ public class ProductController {
                description = "Supprime logiquement un produit (RG-04)")
     @ApiResponse(responseCode = "204", description = "Produit supprimé")
     @ApiResponse(responseCode = "404", description = "Produit non trouvé")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN')")
     public ResponseEntity<Void> delete(
             @Parameter(description = "ID du produit") @PathVariable Long id) {
         productService.delete(id);

@@ -57,12 +57,13 @@ public class SaleService {
     private final AuditService auditService;
     private final WarehouseRepository warehouseRepository;
     private final WarehouseStockRepository warehouseStockRepository;
+    private final WarehouseScopeService warehouseScopeService;
 
     /** Rôles pouvant consulter les ventes de tous les vendeurs. */
-    private static final Set<Role> SUPERVISOR_ROLES = Set.of(Role.SUPER_ADMIN, Role.ADMIN, Role.MANAGER);
+    private static final Set<Role> SUPERVISOR_ROLES = Set.of(Role.SUPER_ADMIN, Role.ADMIN, Role.WAREHOUSE_ADMIN, Role.MANAGER);
 
     /** Rôles autorisés à annuler / modifier n'importe quelle vente (administration). */
-    private static final Set<Role> CANCELLER_ROLES = Set.of(Role.SUPER_ADMIN, Role.ADMIN);
+    private static final Set<Role> CANCELLER_ROLES = Set.of(Role.SUPER_ADMIN, Role.ADMIN, Role.WAREHOUSE_ADMIN);
 
     /** Délai laissé au vendeur pour annuler / modifier lui-même sa vente (RG). */
     private static final java.time.Duration SELF_SERVICE_WINDOW = java.time.Duration.ofHours(4);
@@ -80,19 +81,11 @@ public class SaleService {
         // l'entreprise ; en mode stock simple, warehouse = null (comportement V1).
         Warehouse warehouse = resolveWarehouse(request.getWarehouseId(), companyId);
 
-        // Story 1.3 : un utilisateur affecté à des entrepôts (non-admin) vend
-        // uniquement depuis son périmètre. Sans affectation → comportement
-        // historique inchangé (tous les entrepôts de l'entreprise).
+        // « 1 entrepôt = 1 boutique » : un utilisateur non-Direction Générale
+        // vend uniquement depuis son périmètre (boutique désignée). Sans
+        // périmètre, aucune vente n'est possible quand le module est actif.
         if (warehouse != null) {
-            java.util.Set<Long> assigned = seller.getWarehouses().stream()
-                    .map(Warehouse::getId)
-                    .collect(java.util.stream.Collectors.toSet());
-            boolean supervisor = seller.getRoles() != null && seller.getRoles().stream()
-                    .anyMatch(r -> r == Role.SUPER_ADMIN || r == Role.ADMIN);
-            if (!supervisor && !assigned.isEmpty() && !assigned.contains(warehouse.getId())) {
-                throw new BusinessRuleException(
-                        "Entrepôt « " + warehouse.getName() + " » hors de votre périmètre d'affectation.");
-            }
+            warehouseScopeService.assertWarehouseAllowed(warehouse);
         }
 
         Sale sale = Sale.builder()

@@ -65,7 +65,7 @@ public class OrderController {
      * fournisseur, CLIENT : commande vendeur avec client + date de livraison).
      */
     @PostMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'SELLER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN', 'MANAGER', 'SELLER')")
     @Operation(summary = "Créer une commande",
                description = "Crée une nouvelle commande avec une ou plusieurs lignes. " +
                        "Le montant total est calculé automatiquement.")
@@ -90,7 +90,7 @@ public class OrderController {
     @ApiResponse(responseCode = "200", description = "Commande modifiée")
     @ApiResponse(responseCode = "403", description = "Ni créateur ni profil de gestion")
     @ApiResponse(responseCode = "409", description = "Statut non modifiable")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'SELLER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN', 'MANAGER', 'SELLER')")
     public ResponseEntity<OrderResponse> update(
             @Parameter(description = "ID de la commande") @PathVariable Long id,
             @Valid @RequestBody OrderRequest request,
@@ -111,7 +111,7 @@ public class OrderController {
                        "RG-02 : rejet si stock insuffisant.")
     @ApiResponse(responseCode = "200", description = "Commande validée")
     @ApiResponse(responseCode = "409", description = "Statut invalide ou stock insuffisant")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN', 'MANAGER')")
     public ResponseEntity<OrderResponse> validate(
             @Parameter(description = "ID de la commande") @PathVariable Long id,
             Authentication authentication) {
@@ -129,7 +129,7 @@ public class OrderController {
     @ApiResponse(responseCode = "200", description = "Commande annulée")
     @ApiResponse(responseCode = "403", description = "Ni créateur ni profil de gestion")
     @ApiResponse(responseCode = "409", description = "Statut invalide")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'SELLER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN', 'MANAGER', 'SELLER')")
     public ResponseEntity<OrderResponse> cancel(
             @Parameter(description = "ID de la commande") @PathVariable Long id,
             Authentication authentication) {

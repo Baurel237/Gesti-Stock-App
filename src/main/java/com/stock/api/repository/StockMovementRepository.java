@@ -26,6 +26,9 @@ public interface StockMovementRepository extends JpaRepository<StockMovement, Lo
             "GROUP BY sm.type", nativeQuery = true)
     List<Object[]> getTotalsByType();
 
+    /** Boutiques : nombre de mouvements rattachés à un entrepôt. */
+    long countByWarehouseId(Long warehouseId);
+
     /** Purge des mouvements effectués par un utilisateur (suppression de son compte). */
     void deleteByPerformedBy(User performedBy);
 }

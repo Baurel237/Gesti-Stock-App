@@ -29,6 +29,7 @@ import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -46,6 +47,7 @@ public class StockMovementService {
     private final WarehouseRepository warehouseRepository;
     private final WarehouseStockRepository warehouseStockRepository;
     private final SupplierRepository supplierRepository;
+    private final WarehouseScopeService warehouseScopeService;
 
     /**
      * US-08 : Historique paginé des mouvements d'un produit.
@@ -71,7 +73,7 @@ public class StockMovementService {
                                                       LocalDateTime fromDate, LocalDateTime toDate,
                                                       Pageable pageable) {
         Specification<StockMovement> spec = (root, query, cb) -> {
-            java.util.List<Predicate> predicates = new java.util.ArrayList<>();
+            List<Predicate> predicates = new ArrayList<>();
             if (productId != null) {
                 predicates.add(cb.equal(root.get("product").get("id"), productId));
             }
@@ -89,7 +91,24 @@ public class StockMovementService {
             }
             return cb.and(predicates.toArray(new Predicate[0]));
         };
-        return stockMovementRepository.findAll(spec, pageable).map(this::toResponse);
+        // Périmètre strict par entrepôt : un utilisateur non-Direction Générale
+        // voit uniquement les mouvements de ses entrepôts (affectés ou boutique
+        // implicite). Vue DG (ADMIN/portée plateforme / aucune boutique désignée
+        // identifiable) : pas de filtrage supplémentaire au-delà du tenant.
+        User currentUser = CurrentUserHolder.currentUser(userRepository);
+        List<Long> allowedWarehouseIds = currentUser != null
+                ? warehouseScopeService.allowedWarehouses(TenantContext.getCompanyId()).stream()
+                        .map(Warehouse::getId).toList()
+                : List.of();
+        boolean filterByWarehouse = currentUser != null
+                && !warehouseScopeService.isGlobalViewer(currentUser)
+                && !allowedWarehouseIds.isEmpty();
+        Specification<StockMovement> scopedSpec = filterByWarehouse
+                ? spec.and((root, query, cb) -> cb.and(
+                        cb.isNotNull(root.get("warehouse")),
+                        root.get("warehouse").get("id").in(allowedWarehouseIds)))
+                : spec;
+        return stockMovementRepository.findAll(scopedSpec, pageable).map(this::toResponse);
     }
 
     /**
@@ -124,18 +143,10 @@ public class StockMovementService {
                             "Entrepôt non trouvé avec l'id: " + request.getWarehouseId()));
             TenantGuard.assertSameCompany(warehouse.getCompany().getId());
 
-            // Stories 1.2/1.3 : un utilisateur affecté à des entrepôts (non-admin)
-            // n'opère que dans son périmètre. Sans affectation → historique inchangé.
-            java.util.Set<Long> assigned = user.getWarehouses().stream()
-                    .map(Warehouse::getId)
-                    .collect(java.util.stream.Collectors.toSet());
-            boolean supervisor = user.getRoles() != null && user.getRoles().stream()
-                    .anyMatch(r -> r == com.stock.api.entity.Role.SUPER_ADMIN
-                            || r == com.stock.api.entity.Role.ADMIN);
-            if (!supervisor && !assigned.isEmpty() && !assigned.contains(warehouse.getId())) {
-                throw new BusinessRuleException(
-                        "Entrepôt « " + warehouse.getName() + " » hors de votre périmètre d'affectation.");
-            }
+            // « 1 entrepôt = 1 boutique » : périmètre strict de l'utilisateur
+            // courant (le scope gère la vue Direction Générale et la boutique
+            // implicite quand l'entreprise n'a qu'un entrepôt actif).
+            warehouseScopeService.assertWarehouseAllowed(warehouse);
         }
 
         // RG-02 : vérifier la quantité disponible pour une sortie

@@ -30,7 +30,7 @@ public class SaleController {
     private final SaleService saleService;
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'SELLER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN', 'MANAGER', 'SELLER')")
     @Operation(summary = "Créer une vente", description = "Enregistre une nouvelle vente avec décrément automatique du stock (sortie de stock)")
     @ApiResponse(responseCode = "201", description = "Vente créée")
     @ApiResponse(responseCode = "400", description = "Données invalides")
@@ -54,7 +54,7 @@ public class SaleController {
     }
 
     @PostMapping("/{id}/cancel")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'SELLER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN', 'MANAGER', 'SELLER')")
     @Operation(summary = "Annuler une vente",
                description = "Le vendeur peut annuler sa vente pendant 4 heures après l'enregistrement. "
                        + "Passé ce délai, l'annulation est réservée au SUPER_ADMIN/ADMIN (ou passe par une demande). "
@@ -67,7 +67,7 @@ public class SaleController {
     }
 
     @PostMapping("/{id}/cancellation-request")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'SELLER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN', 'MANAGER', 'SELLER')")
     @Operation(summary = "Demander l'annulation d'une vente",
                description = "Le vendeur demande l'annulation de sa vente après le délai d'auto-annulation (4 h). "
                        + "La demande est traitée par SUPER_ADMIN/ADMIN via /{id}/cancel ou /admin/cancellation-requests/{id}/reject.")
@@ -82,7 +82,7 @@ public class SaleController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'SELLER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN', 'MANAGER', 'SELLER')")
     @Operation(summary = "Modifier une vente",
                description = "Le vendeur peut modifier sa vente pendant 4 heures après l'enregistrement. "
                        + "Passé ce délai, la modification est réservée au SUPER_ADMIN/ADMIN (ou passe par une demande). "
@@ -98,7 +98,7 @@ public class SaleController {
     }
 
     @PostMapping("/{id}/edit-request")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'SELLER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN', 'MANAGER', 'SELLER')")
     @Operation(summary = "Demander la modification d'une vente",
                description = "Le vendeur demande la modification de sa vente après le délai d'auto-modification (4 h). "
                        + "La demande est traitée par SUPER_ADMIN/ADMIN via /admin/edit-requests/{id}/approve.")
@@ -112,7 +112,7 @@ public class SaleController {
     }
 
     @GetMapping("/admin/pending-cancellations")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN')")
     @Operation(summary = "Demandes d'annulation en attente",
                description = "Ventes dont l'annulation a été demandée par un vendeur, à traiter")
     public ResponseEntity<List<SaleResponse>> getPendingCancellations() {
@@ -120,7 +120,7 @@ public class SaleController {
     }
 
     @PostMapping("/admin/cancellation-requests/{id}/reject")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN')")
     @Operation(summary = "Refuser une demande d'annulation",
                description = "Lève la demande d'annulation en attente ; la vente reste effectuée.")
     @ApiResponse(responseCode = "204", description = "Demande refusée")
@@ -130,7 +130,7 @@ public class SaleController {
     }
 
     @GetMapping("/admin/pending-edit-requests")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN')")
     @Operation(summary = "Demandes de modification en attente",
                description = "Demandes de modification de ventes émises par les vendeurs, à traiter")
     public ResponseEntity<List<SaleEditRequestResponse>> getPendingEditRequests() {
@@ -138,7 +138,7 @@ public class SaleController {
     }
 
     @PostMapping("/admin/edit-requests/{requestId}/approve")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN')")
     @Operation(summary = "Approuver une demande de modification",
                description = "Applique la modification demandée (stock recalculé) et marque la demande APPROVED.")
     @ApiResponse(responseCode = "200", description = "Vente modifiée")
@@ -148,7 +148,7 @@ public class SaleController {
     }
 
     @PostMapping("/admin/edit-requests/{requestId}/reject")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN')")
     @Operation(summary = "Refuser une demande de modification",
                description = "Marque la demande REJECTED ; la vente est inchangée.")
     @ApiResponse(responseCode = "200", description = "Demande refusée")
@@ -181,7 +181,7 @@ public class SaleController {
     }
 
     @GetMapping("/admin/seller-stats")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN')")
     @Operation(summary = "Stats vendeurs (admin)", description = "Retourne les statistiques comparatives de tous les vendeurs sur la période")
     @ApiResponse(responseCode = "200", description = "Statistiques retournées")
     public ResponseEntity<List<SellerStatsResponse>> getAdminSellerStats(
@@ -193,7 +193,7 @@ public class SaleController {
     }
 
     @GetMapping("/admin/sellers")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN')")
     @Operation(summary = "Liste des vendeurs avec stats", description = "Liste tous les vendeurs actifs avec leurs statistiques sur la période (y compris sans vente)")
     @ApiResponse(responseCode = "200", description = "Liste retournée")
     public ResponseEntity<List<SellerStatsResponse>> getSellersWithStats(
@@ -205,7 +205,7 @@ public class SaleController {
     }
 
     @GetMapping("/admin/live-feed")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN')")
     @Operation(summary = "Flux des ventes en direct", description = "Dernières ventes réalisées, pour le suivi en temps réel par l'admin")
     @ApiResponse(responseCode = "200", description = "Flux retourné")
     public ResponseEntity<List<SaleResponse>> getLiveFeed(
@@ -215,7 +215,7 @@ public class SaleController {
     }
 
     @GetMapping("/admin/daily-sales")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN')")
     @Operation(summary = "Ventes quotidiennes (admin)", description = "Retourne l'agrégation des ventes par jour")
     @ApiResponse(responseCode = "200", description = "Données retournées")
     public ResponseEntity<List<SellerDashboardStats.DailySalesData>> getDailySales(

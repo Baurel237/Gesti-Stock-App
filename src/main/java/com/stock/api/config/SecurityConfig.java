@@ -57,6 +57,8 @@ public class SecurityConfig {
             ROLE_ADMIN > ROLE_MANAGER
             ROLE_ADMIN > ROLE_GESTIONNAIRE
             ROLE_ADMIN > ROLE_SELLER
+            ROLE_ADMIN > ROLE_WAREHOUSE_ADMIN
+            ROLE_WAREHOUSE_ADMIN > ROLE_MANAGER
             ROLE_MANAGER > ROLE_USER
             ROLE_USER > ROLE_VIEWER
             """);

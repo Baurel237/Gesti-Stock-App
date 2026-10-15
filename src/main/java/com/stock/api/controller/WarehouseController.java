@@ -72,7 +72,7 @@ public class WarehouseController {
             @ApiResponse(responseCode = "400", description = "Données invalides"),
             @ApiResponse(responseCode = "409", description = "Module entrepôts non activé ou nom déjà utilisé")
     })
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN', 'MANAGER')")
     public ResponseEntity<WarehouseResponse> create(@Valid @RequestBody WarehouseRequest request) {
         WarehouseResponse response = warehouseService.create(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -81,7 +81,7 @@ public class WarehouseController {
     @PutMapping("/{id}")
     @Operation(summary = "Mettre à jour un entrepôt",
                description = "Modifie le nom, l'adresse ou l'état actif d'un entrepôt")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN', 'MANAGER')")
     public ResponseEntity<WarehouseResponse> update(
             @Parameter(description = "ID de l'entrepôt") @PathVariable Long id,
             @Valid @RequestBody WarehouseRequest request) {
@@ -95,7 +95,7 @@ public class WarehouseController {
             @ApiResponse(responseCode = "204", description = "Entrepôt supprimé"),
             @ApiResponse(responseCode = "409", description = "Entrepôt non vide")
     })
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN')")
     public ResponseEntity<Void> delete(
             @Parameter(description = "ID de l'entrepôt") @PathVariable Long id) {
         warehouseService.delete(id);
@@ -119,7 +119,7 @@ public class WarehouseController {
             @ApiResponse(responseCode = "400", description = "Requête invalide"),
             @ApiResponse(responseCode = "409", description = "Stock insuffisant ou règle métier violée")
     })
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'GESTIONNAIRE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN', 'MANAGER', 'GESTIONNAIRE')")
     public ResponseEntity<Void> transfer(@Valid @RequestBody WarehouseTransferRequest request) {
         String userEmail = org.springframework.security.core.context.SecurityContextHolder
                 .getContext().getAuthentication().getName();

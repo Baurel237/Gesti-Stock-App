@@ -47,6 +47,38 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
                                 Pageable pageable);
 
     /**
+     * Catalogue d'une boutique (1 entrepôt = 1 boutique) : mêmes filtres que
+     * findByFilters, restreint aux produits possédant du stock dans l'entrepôt
+     * donné (product_stock_per_warehouse > 0). warehouseId null = pas de
+     * restriction (vue Direction Générale / module désactivé).
+     */
+    @Query(value = "SELECT * FROM products p WHERE p.deleted = false " +
+            "AND (:companyId IS NULL OR p.company_id = :companyId) " +
+            "AND (:categoryId IS NULL OR p.category_id = :categoryId) " +
+            "AND (:supplierId IS NULL OR EXISTS (SELECT 1 FROM product_suppliers ps " +
+            "     WHERE ps.product_id = p.id AND ps.supplier_id = :supplierId)) " +
+            "AND (:name IS NULL OR LOWER(p.name) LIKE '%' || LOWER(CAST(:name AS text)) || '%') " +
+            "AND (:warehouseId IS NULL OR EXISTS (SELECT 1 FROM product_stock_per_warehouse ws " +
+            "     WHERE ws.product_id = p.id AND ws.warehouse_id = :warehouseId " +
+            "     AND ws.quantity > 0))",
+            countQuery = "SELECT COUNT(*) FROM products p WHERE p.deleted = false " +
+            "AND (:companyId IS NULL OR p.company_id = :companyId) " +
+            "AND (:categoryId IS NULL OR p.category_id = :categoryId) " +
+            "AND (:supplierId IS NULL OR EXISTS (SELECT 1 FROM product_suppliers ps " +
+            "     WHERE ps.product_id = p.id AND ps.supplier_id = :supplierId)) " +
+            "AND (:name IS NULL OR LOWER(p.name) LIKE '%' || LOWER(CAST(:name AS text)) || '%') " +
+            "AND (:warehouseId IS NULL OR EXISTS (SELECT 1 FROM product_stock_per_warehouse ws " +
+            "     WHERE ws.product_id = p.id AND ws.warehouse_id = :warehouseId " +
+            "     AND ws.quantity > 0))",
+            nativeQuery = true)
+    Page<Product> findByFiltersForWarehouse(@Param("companyId") Long companyId,
+                                            @Param("categoryId") Long categoryId,
+                                            @Param("supplierId") Long supplierId,
+                                            @Param("name") String name,
+                                            @Param("warehouseId") Long warehouseId,
+                                            Pageable pageable);
+
+    /**
      * Stories 2.3/2.4 : dé-lie un fournisseur (supprimé logiquement) de tous
      * les produits — ses produits redeviennent visibles sous « Tous les
      * fournisseurs » et n'apparaissent plus dans les sélecteurs.

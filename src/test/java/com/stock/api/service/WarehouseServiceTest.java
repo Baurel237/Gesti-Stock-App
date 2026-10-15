@@ -6,6 +6,10 @@ import com.stock.api.entity.Company;
 import com.stock.api.entity.Product;
 import com.stock.api.entity.Warehouse;
 import com.stock.api.entity.WarehouseStock;
+import com.stock.api.repository.CompanyRepository;
+import com.stock.api.repository.ProductRepository;
+import com.stock.api.repository.StockMovementRepository;
+import com.stock.api.repository.UserRepository;
 import com.stock.api.repository.WarehouseRepository;
 import com.stock.api.repository.WarehouseStockRepository;
 import com.stock.api.service.AuditService;
@@ -47,6 +51,21 @@ class WarehouseServiceTest {
 
     @Mock
     private AuditService auditService;
+
+    @Mock
+    private UserRepository userRepository;
+
+    @Mock
+    private CompanyRepository companyRepository;
+
+    @Mock
+    private ProductRepository productRepository;
+
+    @Mock
+    private StockMovementRepository stockMovementRepository;
+
+    @Mock
+    private WarehouseScopeService warehouseScopeService;
 
     @InjectMocks
     private WarehouseService warehouseService;

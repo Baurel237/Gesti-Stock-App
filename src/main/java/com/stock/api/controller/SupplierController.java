@@ -56,7 +56,7 @@ public class SupplierController {
     @ApiResponse(responseCode = "201", description = "Fournisseur créé")
     @ApiResponse(responseCode = "400", description = "Données invalides")
     @ApiResponse(responseCode = "409", description = "Nom déjà utilisé dans l'entreprise")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN')")
     public ResponseEntity<SupplierResponse> create(@Valid @RequestBody SupplierRequest request) {
         SupplierResponse response = supplierService.create(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -68,7 +68,7 @@ public class SupplierController {
     @ApiResponse(responseCode = "200", description = "Fournisseur mis à jour")
     @ApiResponse(responseCode = "404", description = "Fournisseur non trouvé")
     @ApiResponse(responseCode = "409", description = "Nom déjà utilisé dans l'entreprise")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN')")
     public ResponseEntity<SupplierResponse> update(
             @Parameter(description = "ID du fournisseur") @PathVariable Long id,
             @Valid @RequestBody SupplierRequest request) {
@@ -80,7 +80,7 @@ public class SupplierController {
                description = "Suppression logique (RG-04) : le fournisseur disparaît des listes, l'historique est conservé")
     @ApiResponse(responseCode = "204", description = "Fournisseur supprimé")
     @ApiResponse(responseCode = "404", description = "Fournisseur non trouvé")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN')")
     public ResponseEntity<Void> delete(
             @Parameter(description = "ID du fournisseur") @PathVariable Long id) {
         supplierService.delete(id);

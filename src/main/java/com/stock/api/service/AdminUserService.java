@@ -13,7 +13,10 @@ import com.stock.api.repository.SaleEditRequestRepository;
 import com.stock.api.repository.SaleRepository;
 import com.stock.api.repository.StockMovementRepository;
 import com.stock.api.repository.UserRepository;
+import com.stock.api.repository.CompanyRepository;
 import com.stock.api.repository.WarehouseRepository;
+
+import org.springframework.data.domain.PageImpl;
 import com.stock.api.service.AuditService;
 import com.stock.api.tenant.TenantContext;
 import com.stock.api.tenant.TenantGuard;
@@ -27,8 +30,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -41,9 +47,9 @@ public class AdminUserService {
     private final StockMovementRepository stockMovementRepository;
     private final SaleEditRequestRepository saleEditRequestRepository;
     private final ProductCommentRepository productCommentRepository;
-    private final com.stock.api.repository.CompanyRepository companyRepository;
+    private final CompanyRepository companyRepository;
     private final WarehouseRepository warehouseRepository;
-
+    private final WarehouseScopeService warehouseScopeService;
     @Transactional(readOnly = true)
     public Page<UserResponse> findAll(Pageable pageable) {
         // V2 : un ADMIN ne gère que les comptes de son entreprise ;
@@ -52,6 +58,21 @@ public class AdminUserService {
         Page<User> users = companyId == null
                 ? userRepository.findAll(pageable)
                 : userRepository.findByCompanyId(companyId, pageable);
+        // « 1 entrepôt = 1 boutique » : un WAREHOUSE_ADMIN (non vue DG) ne voit
+        // que les comptes affectés à au moins un de ses entrepôts (le sien).
+        User current = CurrentUserHolder.currentUser(userRepository);
+        if (current != null && !warehouseScopeService.isGlobalViewer(current)
+                && current.hasRole(Role.WAREHOUSE_ADMIN) && companyId != null) {
+            Set<Long> scoped = warehouseScopeService.allowedWarehouses(companyId).stream()
+                    .map(Warehouse::getId).collect(Collectors.toSet());
+            users = new PageImpl<>(
+                    users.getContent().stream()
+                            .filter(u -> u.getWarehouses().stream()
+                                    .anyMatch(w -> scoped.contains(w.getId()))
+                                    || u.getId().equals(current.getId()))
+                            .toList(),
+                    pageable, users.getTotalElements());
+        }
         return users.map(this::toResponse);
     }
 
@@ -97,8 +118,17 @@ public class AdminUserService {
         }
 
         user = userRepository.save(user);
+
+        // « 1 entrepôt = 1 boutique » : affectation dès la création si fournie
+        String warehouseChange = null;
+        if (request.getWarehouseIds() != null) {
+            warehouseChange = applyWarehouseAssignment(user, request.getWarehouseIds());
+            user = userRepository.save(user);
+        }
+
         auditService.record("CREATE", "User", user.getId(), user.getEmail(),
-                "Compte créé avec rôles : " + roleNames(roles));
+                "Compte créé avec rôles : " + roleNames(roles)
+                        + (warehouseChange != null ? " — entrepôts : " + warehouseChange : ""));
         return toResponse(user);
     }
 
@@ -106,6 +136,7 @@ public class AdminUserService {
     public UserResponse update(Long id, UpdateUserRequest request) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Utilisateur non trouvé avec l'id: " + id));
+        assertTargetWithinScope(user);
 
         // Interdire à un utilisateur de désactiver son propre compte
         // (il se couperait l'accès immédiatement et sans retour simple).
@@ -162,6 +193,7 @@ public class AdminUserService {
                 .orElseThrow(() -> new IllegalArgumentException("Utilisateur non trouvé avec l'id: " + id));
 
         assertCanModifyTarget(user);
+        assertTargetWithinScope(user);
 
         boolean generated = newPassword == null || newPassword.isBlank();
         String password = generated ? generateTemporaryPassword() : newPassword.trim();
@@ -216,6 +248,7 @@ public class AdminUserService {
     public void delete(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Utilisateur non trouvé avec l'id: " + id));
+        assertTargetWithinScope(user);
 
         // Interdire la suppression de son propre compte.
         if (isSelf(user)) {
@@ -257,7 +290,7 @@ public class AdminUserService {
         }
 
         Long companyId = user.getCompany().getId();
-        java.util.LinkedHashSet<Warehouse> warehouses = new java.util.LinkedHashSet<>();
+        LinkedHashSet<Warehouse> warehouses = new LinkedHashSet<>();
         for (Long warehouseId : warehouseIds) {
             Warehouse warehouse = warehouseRepository.findById(warehouseId)
                     .orElseThrow(() -> new BusinessRuleException(
@@ -276,17 +309,43 @@ public class AdminUserService {
         user.getWarehouses().clear();
         user.getWarehouses().addAll(warehouses);
         return warehouses.stream().map(Warehouse::getName)
-                .collect(java.util.stream.Collectors.joining(", "));
+                .collect(Collectors.joining(", "));
     }
 
     /**
      * Seul un SUPER_ADMIN peut attribuer les rôles ADMIN ou SUPER_ADMIN.
+     * Un WAREHOUSE_ADMIN (admin de boutique) ne peut pas attribuer des
+     * rôles de gestion d'entreprise : il gère l'équipe de sa boutique.
      */
     private void assertCanAssignRoles(Set<Role> roles) {
         if ((roles.contains(Role.ADMIN) || roles.contains(Role.SUPER_ADMIN))
                 && !CurrentUser.isSuperAdmin()) {
             throw new AccessDeniedException(
                     "Seul un super administrateur peut attribuer les rôles ADMIN ou SUPER_ADMIN");
+        }
+    }
+
+    /**
+     * « 1 entrepôt = 1 boutique » : un WAREHOUSE_ADMIN ne peut modifier,
+     * réinitialiser ni supprimer que les comptes de son entrepôt (et le sien).
+     * Vue DG (ADMIN/SUPER_ADMIN) : tout le monde.
+     */
+    private void assertTargetWithinScope(User target) {
+        User current = CurrentUserHolder.currentUser(userRepository);
+        if (current == null || warehouseScopeService.isGlobalViewer(current)) {
+            return;
+        }
+        if (!current.hasRole(Role.WAREHOUSE_ADMIN)) {
+            return; // autres rôles déjà bloqués par @PreAuthorize contrôleur
+        }
+        Set<Long> scoped = warehouseScopeService
+                .allowedWarehouses(TenantContext.getCompanyId()).stream()
+                .map(Warehouse::getId).collect(Collectors.toSet());
+        boolean sameShop = target.getWarehouses().stream()
+                .anyMatch(w -> scoped.contains(w.getId()));
+        if (!sameShop && !target.getId().equals(current.getId())) {
+            throw new AccessDeniedException(
+                    "Compte « " + target.getEmail() + " » hors de votre entrepôt.");
         }
     }
 
@@ -323,14 +382,14 @@ public class AdminUserService {
     }
 
     private String validRoleNames() {
-        return java.util.Arrays.stream(Role.values())
+        return Arrays.stream(Role.values())
                 .map(Enum::name)
                 .sorted()
-                .collect(java.util.stream.Collectors.joining(", "));
+                .collect(Collectors.joining(", "));
     }
 
     private String roleNames(Set<Role> roles) {
-        return roles.stream().map(Enum::name).sorted().collect(java.util.stream.Collectors.joining(", "));
+        return roles.stream().map(Enum::name).sorted().collect(Collectors.joining(", "));
     }
 
     private UserResponse toResponse(User user) {
@@ -339,13 +398,13 @@ public class AdminUserService {
                 .email(user.getEmail())
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
-                .roles(user.getRoles().stream().map(Role::name).collect(java.util.stream.Collectors.toSet()))
+                .roles(user.getRoles().stream().map(Role::name).collect(Collectors.toSet()))
                 .active(user.isActive())
                 .companyId(user.getCompany() != null ? user.getCompany().getId() : null)
                 .companyName(user.getCompany() != null ? user.getCompany().getName() : null)
                 .warehouseIds(user.getWarehouses().stream()
                         .map(Warehouse::getId)
-                        .collect(java.util.stream.Collectors.toSet()))
+                        .collect(Collectors.toSet()))
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())
                 .build();

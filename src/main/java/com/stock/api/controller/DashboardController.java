@@ -34,4 +34,31 @@ public class DashboardController {
     public ResponseEntity<DashboardStatsResponse> getStats() {
         return ResponseEntity.ok(dashboardService.getStats());
     }
+
+    /**
+     * Statistiques d'une boutique (entrepôt). L'autorisation (Direction
+     * Générale ou équipe de la boutique uniquement) est vérifiée dans le
+     * service — le contrôleur ne fait que router.
+     */
+    @GetMapping("/warehouses/{warehouseId}/stats")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Statistiques d'une boutique",
+               description = "Agrégats propres à un entrepôt : produits disponibles, valeur du stock "
+                       + "local, ventes et mouvements de la boutique uniquement")
+    @ApiResponse(responseCode = "200", description = "Statistiques retournées")
+    public ResponseEntity<com.stock.api.dto.WarehouseStatsResponse> getWarehouseStats(
+            @org.springframework.web.bind.annotation.PathVariable Long warehouseId) {
+        return ResponseEntity.ok(dashboardService.getWarehouseStats(warehouseId));
+    }
+
+    /** Vue Direction Générale : stats de toutes les boutiques du périmètre. */
+    @GetMapping("/warehouse-stats")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Statistiques toutes boutiques",
+               description = "Stats de chaque entrepôt autorisé pour l'utilisateur courant "
+                       + "(Direction Générale = toutes, admin d'entrepôt = la sienne)")
+    @ApiResponse(responseCode = "200", description = "Statistiques retournées")
+    public ResponseEntity<java.util.List<com.stock.api.dto.WarehouseStatsResponse>> getWarehouseStatsForScope() {
+        return ResponseEntity.ok(dashboardService.getWarehouseStatsForScope());
+    }
 }

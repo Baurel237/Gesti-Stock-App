@@ -70,7 +70,7 @@ public class DataInitializer implements CommandLineRunner {
 
     private static final String ADD_ROLE_CHECK_SQL =
             "ALTER TABLE user_roles ADD CONSTRAINT user_roles_role_check CHECK (role IN "
-                    + "('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'GESTIONNAIRE', 'SELLER', 'USER', 'VIEWER'))";
+                    + "('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN', 'MANAGER', 'GESTIONNAIRE', 'SELLER', 'USER', 'VIEWER'))";
 
     /**
      * Unicité des noms de produits et catégories parmi les lignes ACTIVES

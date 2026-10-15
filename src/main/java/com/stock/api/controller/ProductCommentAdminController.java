@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/admin/product-comments")
 @RequiredArgsConstructor
 @Tag(name = "Commentaires produits (admin)", description = "Journal des alertes laissées par les vendeurs")
-@PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'MANAGER')")
+@PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'WAREHOUSE_ADMIN', 'MANAGER')")
 public class ProductCommentAdminController {
 
     private final ProductCommentService productCommentService;
