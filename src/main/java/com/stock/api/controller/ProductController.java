@@ -125,7 +125,7 @@ public class ProductController {
                 .contentType(MediaType.parseMediaType(image.contentType()))
                 .cacheControl(CacheControl.noCache())
                 .header("X-Content-Type-Options", "nosniff")
-                .body(new FileSystemResource(image.path()));
+                .body(image.resource());
     }
 
     /** Supprime uniquement la photo, sans supprimer le produit. */

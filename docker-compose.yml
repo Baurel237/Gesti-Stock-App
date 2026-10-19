@@ -6,7 +6,9 @@ services:
     container_name: stock-api-postgres
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      # Port hôte 5545 : 5432/5433 sont occupés par des PostgreSQL d'autres projets
+      # sur cette machine (sinon, remettez "5432:5432" et ajustez DB_PORT si besoin).
+      - "5545:5432"
     environment:
       POSTGRES_DB: stock_db
       POSTGRES_USER: stock_user
@@ -21,6 +23,30 @@ services:
       timeout: 5s
       retries: 5
 
+  # Stockage objet compatible S3 pour les images produits
+  # (activer avec IMAGE_STORAGE_MODE=s3 côté API).
+  minio:
+    # Miroir MinIO (minio/minio indisponible derrière le registre/proxy local)
+    image: elestio/minio:latest
+    container_name: stock-api-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres_data:
+    driver: local
+  minio_data:
     driver: local

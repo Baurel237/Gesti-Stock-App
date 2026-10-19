@@ -95,6 +95,13 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- MinIO (stockage objet S3 des images produits) -->
+        <dependency>
+            <groupId>io.minio</groupId>
+            <artifactId>minio</artifactId>
+            <version>8.5.17</version>
+        </dependency>
+
         <!-- SpringDoc OpenAPI (Swagger UI) -->
         <dependency>
             <groupId>org.springdoc</groupId>

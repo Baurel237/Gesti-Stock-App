@@ -1,28 +1,28 @@
 package com.stock.api.service;
 
 import com.stock.api.entity.Product;
+import com.stock.api.service.image.ProductImageStore;
+import com.stock.api.service.ProductImageStorageService.StoredImage;
 import com.stock.api.repository.ProductRepository;
 import com.stock.api.tenant.TenantGuard;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
-
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 @Service
 @RequiredArgsConstructor
 public class ProductImageService {
 
     private final ProductRepository productRepository;
-    private final ProductImageStorageService storage;
+    private final ProductImageStore storage;
 
     @Transactional
     public Product upload(Long productId, org.springframework.web.multipart.MultipartFile file) {
         Product product = findAccessibleProduct(productId);
-        ProductImageStorageService.StoredImage stored = storage.store(file);
+        StoredImage stored = storage.store(file);
         String previousImage = product.getImagePath();
         try {
             product.setImagePath(stored.filename());
@@ -53,11 +53,8 @@ public class ProductImageService {
         if (product.getImagePath() == null || product.getImageContentType() == null) {
             throw new IllegalArgumentException("Ce produit n'a pas de photo.");
         }
-        Path path = storage.resolveStoredPath(product.getImagePath());
-        if (!Files.isRegularFile(path)) {
-            throw new IllegalArgumentException("La photo du produit est introuvable.");
-        }
-        return new ProductImageFile(path, product.getImageContentType());
+        Resource resource = storage.read(product.getImagePath(), product.getImageContentType());
+        return new ProductImageFile(resource, product.getImageContentType());
     }
 
     private static void afterCommit(Runnable action) {
@@ -88,5 +85,5 @@ public class ProductImageService {
         return product;
     }
 
-    public record ProductImageFile(Path path, String contentType) {}
+    public record ProductImageFile(Resource resource, String contentType) {}
 }
