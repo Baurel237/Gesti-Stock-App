@@ -35,13 +35,6 @@ public class Sale {
     @Column(name = "company_id", nullable = false)
     private Long companyId;
 
-    /**
-     * Entrepôt de décrémentation (module optionnel V2) — null en mode stock simple.
-     */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "warehouse_id")
-    private Warehouse warehouse;
-
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     @Builder.Default

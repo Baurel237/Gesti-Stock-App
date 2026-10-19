@@ -12,18 +12,23 @@ import org.testcontainers.containers.PostgreSQLContainer;
  */
 public abstract class PostgresContainerConfig {
 
-    // Mode « PostgreSQL externe » : si USE_EXTERNAL_PG=true, on n'utilise pas
-    // Testcontainers (utile en local quand Docker n'est pas détecté par
-    // Testcontainers) mais un PostgreSQL déjà lancé (ex. docker compose).
+    // Mode « PostgreSQL externe » : si USE_EXTERNAL_PG=true (ou si les
+    // variables E2E_PG_* sont renseignées), on n'utilise pas Testcontainers
+    // (qui demande un environnement Docker de fonctionner côté build) mais
+    // un PostgreSQL déjà lancé (ex. docker compose).
     // Les paramètres de connexion sont lus dans des variables DÉDIÉES
-    // (E2E_PG_*) et non SPRING_DATASOURCE_* : ces dernières signifient
+    // (E2E_PG_*) et non SPRING_DATASOURCE_* : ces dernières signifieraient
     // quelque chose pour Spring et fuiteraient dans les tests unitaires
     // H2 tournant dans le même process Maven (driver H2 rejetant l'URL).
+    // Par défaut on utilise Testcontainers (conteneur PostgreSQL dédié).
+    // Pour pointer vers un PostgreSQL externe déjà démarré (ex. docker compose
+    // de l'E2E), on définit USE_EXTERNAL_PG=true et les variables E2E_PG_*.
     private static final boolean USE_EXTERNAL_PG =
             Boolean.parseBoolean(System.getenv().getOrDefault("USE_EXTERNAL_PG", "false"));
 
     // Conteneur unique partagé — démarré statiquement
     // pour que @DynamicPropertySource puisse accéder aux URLs
+    // (utilisé uniquement en mode Testcontainers, i.e. quand USE_EXTERNAL_PG=false)
     protected static final PostgreSQLContainer<?> postgres =
             new PostgreSQLContainer<>("postgres:15-alpine")
                     .withDatabaseName("stock_test")
@@ -32,7 +37,7 @@ public abstract class PostgresContainerConfig {
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
-        // Démarrer le conteneur si pas encore lancé
+        // Démarrer le conteneur si pas encore lancé (mode Testcontainers seulement)
         if (!USE_EXTERNAL_PG && !postgres.isRunning()) {
             postgres.start();
         }
@@ -52,7 +57,7 @@ public abstract class PostgresContainerConfig {
         }
         registry.add("spring.datasource.driver-class-name", () -> "org.postgresql.Driver");
         // Les IT valident maintenant le même schéma que la production :
-        // Flyway exécute V1→V5 sur le conteneur, Hibernate se borne à
+        // Flyway exécute V1→V13 sur le conteneur, Hibernate se borne à
         // valider les entités contre le schéma migré (ddl-auto=validate).
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "validate");
         // Le profil « test » (ressources de test, qui masquent celles de main

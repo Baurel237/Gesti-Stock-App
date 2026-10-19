@@ -12,12 +12,7 @@ import com.stock.api.repository.ProductRepository;
 import com.stock.api.repository.StockMovementRepository;
 import com.stock.api.repository.SupplierRepository;
 import com.stock.api.repository.UserRepository;
-import com.stock.api.repository.WarehouseRepository;
-import com.stock.api.repository.WarehouseStockRepository;
-import com.stock.api.entity.Warehouse;
-import com.stock.api.entity.WarehouseStock;
 import com.stock.api.exception.BusinessRuleException;
-import com.stock.api.tenant.TenantContext;
 import com.stock.api.tenant.TenantGuard;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -44,10 +39,7 @@ public class StockMovementService {
     private final StockMovementRepository stockMovementRepository;
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
-    private final WarehouseRepository warehouseRepository;
-    private final WarehouseStockRepository warehouseStockRepository;
     private final SupplierRepository supplierRepository;
-    private final WarehouseScopeService warehouseScopeService;
 
     /**
      * US-08 : Historique paginé des mouvements d'un produit.
@@ -56,12 +48,6 @@ public class StockMovementService {
     public Page<StockMovementResponse> findByProductId(Long productId, Pageable pageable) {
         return stockMovementRepository.findByProductIdOrderByCreatedAtDesc(productId, pageable)
                 .map(this::toResponse);
-    }
-
-    /** Stock par entrepôt d'un produit (module optionnel). */
-    @Transactional(readOnly = true)
-    public List<WarehouseStock> getStockByWarehouse(Long productId) {
-        return warehouseStockRepository.findByProductId(productId);
     }
 
     /**
@@ -91,24 +77,7 @@ public class StockMovementService {
             }
             return cb.and(predicates.toArray(new Predicate[0]));
         };
-        // Périmètre strict par entrepôt : un utilisateur non-Direction Générale
-        // voit uniquement les mouvements de ses entrepôts (affectés ou boutique
-        // implicite). Vue DG (ADMIN/portée plateforme / aucune boutique désignée
-        // identifiable) : pas de filtrage supplémentaire au-delà du tenant.
-        User currentUser = CurrentUserHolder.currentUser(userRepository);
-        List<Long> allowedWarehouseIds = currentUser != null
-                ? warehouseScopeService.allowedWarehouses(TenantContext.getCompanyId()).stream()
-                        .map(Warehouse::getId).toList()
-                : List.of();
-        boolean filterByWarehouse = currentUser != null
-                && !warehouseScopeService.isGlobalViewer(currentUser)
-                && !allowedWarehouseIds.isEmpty();
-        Specification<StockMovement> scopedSpec = filterByWarehouse
-                ? spec.and((root, query, cb) -> cb.and(
-                        cb.isNotNull(root.get("warehouse")),
-                        root.get("warehouse").get("id").in(allowedWarehouseIds)))
-                : spec;
-        return stockMovementRepository.findAll(scopedSpec, pageable).map(this::toResponse);
+        return stockMovementRepository.findAll(spec, pageable).map(this::toResponse);
     }
 
     /**
@@ -135,34 +104,9 @@ public class StockMovementService {
         Long companyId = user.getCompany() != null ? user.getCompany().getId() : null;
         TenantGuard.assertSameCompany(companyId);
 
-        // Entrepôt optionnel (module activé uniquement)
-        Warehouse warehouse = null;
-        if (request.getWarehouseId() != null) {
-            warehouse = warehouseRepository.findById(request.getWarehouseId())
-                    .orElseThrow(() -> new IllegalArgumentException(
-                            "Entrepôt non trouvé avec l'id: " + request.getWarehouseId()));
-            TenantGuard.assertSameCompany(warehouse.getCompany().getId());
-
-            // « 1 entrepôt = 1 boutique » : périmètre strict de l'utilisateur
-            // courant (le scope gère la vue Direction Générale et la boutique
-            // implicite quand l'entreprise n'a qu'un entrepôt actif).
-            warehouseScopeService.assertWarehouseAllowed(warehouse);
-        }
-
         // RG-02 : vérifier la quantité disponible pour une sortie
         if (request.getType() == MovementType.EXIT) {
-            if (warehouse != null) {
-                WarehouseStock stock = warehouseStockRepository
-                        .findByProductIdAndWarehouseId(product.getId(), warehouse.getId())
-                        .orElseThrow(() -> new IllegalStateException(
-                                String.format("'%s' n'est pas stocké dans cet entrepôt.", product.getName())));
-                if (!stock.canRemove(request.getQuantity())) {
-                    throw new IllegalStateException(
-                            String.format("Quantité insuffisante pour '%s' dans l'entrepôt '%s'. " +
-                                            "Disponible: %d, Demandé: %d",
-                                    product.getName(), warehouse.getName(), stock.getQuantity(), request.getQuantity()));
-                }
-            } else if (!product.canRemoveQuantity(request.getQuantity())) {
+            if (!product.canRemoveQuantity(request.getQuantity())) {
                 throw new IllegalStateException(
                         String.format("Quantité insuffisante pour le produit '%s'. " +
                                 "Disponible: %d, Demandé: %d",
@@ -196,7 +140,6 @@ public class StockMovementService {
                 .reason(request.getReason())
                 .performedBy(user)
                 .companyId(companyId)
-                .warehouse(warehouse)
                 .supplier(supplier)
                 .build();
 
@@ -205,26 +148,7 @@ public class StockMovementService {
         // Mettre à jour la quantité du produit (RG-01 : jamais négatif)
         if (request.getType() == MovementType.ENTRY) {
             product.addQuantity(request.getQuantity());
-            if (warehouse != null) {
-                final Warehouse targetWarehouse = warehouse;
-                WarehouseStock stock = warehouseStockRepository
-                        .findByProductIdAndWarehouseId(product.getId(), warehouse.getId())
-                        .orElseGet(() -> warehouseStockRepository.save(WarehouseStock.builder()
-                                .companyId(companyId)
-                                .product(product)
-                                .warehouse(targetWarehouse)
-                                .quantity(0)
-                                .build()));
-                stock.setQuantity(stock.getQuantity() + request.getQuantity());
-                warehouseStockRepository.save(stock);
-            }
         } else {
-            if (warehouse != null) {
-                WarehouseStock stock = warehouseStockRepository
-                        .findByProductIdAndWarehouseId(product.getId(), warehouse.getId()).orElseThrow();
-                stock.setQuantity(stock.getQuantity() - request.getQuantity());
-                warehouseStockRepository.save(stock);
-            }
             product.removeQuantity(request.getQuantity());
         }
         productRepository.save(product);

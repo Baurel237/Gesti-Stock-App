@@ -16,30 +16,30 @@ jobs:
   # JOB 1 : Build + Tests unitaires
   # ═══════════════════════════════════════════════
   build:
-    name: 🏗️ Build & Unit Tests
+    name: Build : Build & Unit Tests
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: ☕ Setup Java ${{ env.JAVA_VERSION }}
+      - name: Java Setup Java ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v4
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: 📦 Build & Compile
+      - name: Build & Compile
         run: mvn compile -q
 
-      - name: 🧪 Run Unit Tests
+      - name: Run Unit Tests
         run: mvn test -q
 
-      - name: 📈 Generate JaCoCo Coverage Report
+      - name: Generate JaCoCo Coverage Report
         run: mvn jacoco:report -q
 
-      - name: 📊 Upload Test Results
+      - name: Upload Test Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -47,7 +47,7 @@ jobs:
           path: target/surefire-reports/
           retention-days: 7
 
-      - name: 📈 Upload Coverage Report
+      - name: Upload Coverage Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -55,10 +55,10 @@ jobs:
           path: target/site/jacoco/
           retention-days: 7
 
-      - name: 📦 Package (skip tests — déjà lancés)
+      - name: Package (skip tests — déjà lancés)
         run: mvn package -DskipTests -q
 
-      - name: 💾 Upload JAR
+      - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
           name: stock-api-jar
@@ -69,32 +69,32 @@ jobs:
   # JOB 2 : Tests d'intégration (PostgreSQL via Testcontainers)
   # ═══════════════════════════════════════════════
   integration-tests:
-    name: 🐘 Integration Tests (PostgreSQL Testcontainers)
+    name: PostgreSQL Integration Tests (PostgreSQL Testcontainers)
     runs-on: ubuntu-latest
     needs: build
 
     steps:
-      - name: 📥 Checkout
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: ☕ Setup Java ${{ env.JAVA_VERSION }}
+      - name: Java Setup Java ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v4
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: 🧪 Run Integration Tests
+      - name: Run Integration Tests
         run: mvn verify
         env:
           # FullFlowIT démarre sur le profil « postgresql » qui exige un secret
           # JWT (valeur de test, déjà publique dans application-test.properties).
           # Le datasource vient de Testcontainers (@DynamicPropertySource, priorité
-          # maximale). Le schéma est créé par les migrations Flyway (V1→V5) puis
+          # maximale). Le schéma est créé par les migrations Flyway (V1→V13) puis
           # audité par Hibernate (ddl-auto=validate) — exactement comme en prod.
           JWT_SECRET: ZGV2LXRlc3Qtc2VjcmV0LWtleS1mb3Itand0LXNpZ25pbmctbXVzdC1iZS1sb25nLWVub3VnaA==
 
-      - name: 📊 Upload Integration Test Results
+      - name: Upload Integration Test Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -106,14 +106,14 @@ jobs:
   # JOB 3 : Quality Gate
   # ═══════════════════════════════════════════════
   quality:
-    name: ✅ Quality Gate
+    name: Quality Gate
     runs-on: ubuntu-latest
     needs: [ build, integration-tests ]
 
     steps:
       - name: 🎯 All checks passed
         run: |
-          echo "✅ Build: OK"
-          echo "✅ Unit Tests: OK"
-          echo "✅ Integration Tests: OK"
-          echo "🎉 Pipeline CI/CD réussi !"
+          echo "Build: OK"
+          echo "Unit Tests: OK"
+          echo "Integration Tests: OK"
+          echo "Pipeline CI/CD réussi !"

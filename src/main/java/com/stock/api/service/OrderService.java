@@ -19,8 +19,6 @@ import com.stock.api.repository.ProductRepository;
 import com.stock.api.repository.StockMovementRepository;
 import com.stock.api.repository.SupplierRepository;
 import com.stock.api.repository.UserRepository;
-import com.stock.api.repository.WarehouseRepository;
-import com.stock.api.entity.Warehouse;
 import com.stock.api.tenant.TenantGuard;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -53,7 +51,6 @@ public class OrderService {
     private final UserRepository userRepository;
     private final StockMovementRepository stockMovementRepository;
     private final SupplierRepository supplierRepository;
-    private final WarehouseRepository warehouseRepository;
 
     /**
      * US-09 : Liste paginée des commandes avec filtres.
@@ -124,10 +121,6 @@ public class OrderService {
             }
         }
 
-        // Entrepôt / boutique d'origine (V11) : pour un vendeur affecté à un
-        // entrepôt, la commande y est rattachée automatiquement (ticket).
-        Warehouse warehouse = resolveWarehouse(user);
-
         // Générer une référence unique
         String reference = generateReference();
 
@@ -139,7 +132,6 @@ public class OrderService {
                 .status(OrderStatus.PENDING)
                 .orderType(type)
                 .supplier(supplier)
-                .warehouse(warehouse)
                 .clientName(type == OrderType.CLIENT ? request.getClientName().trim() : null)
                 .deliveryDate(type == OrderType.CLIENT ? request.getDeliveryDate() : null)
                 .notes(request.getNotes())
@@ -429,21 +421,6 @@ public class OrderService {
         return String.format("CMD-%s-%s", datePart, uniquePart);
     }
 
-    /**
-     * V11 : entrepôt / boutique d'origine de la commande.
-     * Si le créateur est affecté à un seul entrepôt actif, la commande y est
-     * rattachée automatiquement ; profils multi-affectés ou non affectés → null.
-     */
-    private Warehouse resolveWarehouse(User user) {
-        if (user.getWarehouses() == null) {
-            return null;
-        }
-        java.util.Set<Warehouse> actives = user.getWarehouses().stream()
-                .filter(Warehouse::isActive)
-                .collect(java.util.stream.Collectors.toSet());
-        return actives.size() == 1 ? actives.iterator().next() : null;
-    }
-
     private boolean hasRole(User user, Role... roles) {
         if (user.getRoles() == null) {
             return false;
@@ -482,9 +459,6 @@ public class OrderService {
                 .supplierName(order.getSupplier() != null ? order.getSupplier().getName() : null)
                 .clientName(order.getClientName())
                 .deliveryDate(order.getDeliveryDate())
-                .warehouseId(order.getWarehouse() != null ? order.getWarehouse().getId() : null)
-                .warehouseName(order.getWarehouse() != null ? order.getWarehouse().getName() : null)
-                .warehouseLocation(order.getWarehouse() != null ? order.getWarehouse().getLocation() : null)
                 .notes(order.getNotes())
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())

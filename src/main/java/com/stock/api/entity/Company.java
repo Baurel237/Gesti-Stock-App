@@ -38,15 +38,6 @@ public class Company {
     @Builder.Default
     private boolean active = true;
 
-    /**
-     * Module entrepôts OPTIONNEL. false (défaut) = stock simple existant
-     * (Product.quantity, aucun entrepôt requis). true = l'entreprise peut
-     * créer des entrepôts et gérer le stock par entrepôt.
-     */
-    @Column(name = "warehouse_enabled", nullable = false)
-    @Builder.Default
-    private boolean warehouseEnabled = false;
-
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

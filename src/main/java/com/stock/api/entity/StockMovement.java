@@ -63,13 +63,6 @@ public class StockMovement {
     private Long companyId;
 
     /**
-     * Entrepôt concerné (module optionnel V2) — null en mode stock simple.
-     */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "warehouse_id")
-    private Warehouse warehouse;
-
-    /**
      * Fournisseur du réapprovisionnement (story 2.2) — renseigné sur les
      * entrées, null pour les sorties et les mouvements historiques.
      */

@@ -55,18 +55,6 @@ public class User {
     @Builder.Default
     private Set<Role> roles = new HashSet<>();
 
-    /**
-     * Entrepôts affectés (stories 1.1/1.2/1.3) — uniquement pertinent si le
-     * module entrepôts est activé pour l'entreprise. Vide = pas de
-     * restriction (l'utilisateur voit tous les entrepôts, comportement
-     * historique inchangé).
-     */
-    @ManyToMany(fetch = FetchType.LAZY)
-    @JoinTable(name = "user_warehouses",
-            joinColumns = @JoinColumn(name = "user_id"),
-            inverseJoinColumns = @JoinColumn(name = "warehouse_id"))
-    @Builder.Default
-    private Set<Warehouse> warehouses = new HashSet<>();
 
     @Column(nullable = false)
     @Builder.Default

@@ -21,7 +21,4 @@ public class CompanyRequest {
     /** Identifiant URL unique ; généré depuis le nom si absent. */
     @Size(max = 100, message = "L'identifiant ne doit pas dépasser 100 caractères")
     private String slug;
-
-    /** Active le module entrepôts optionnel (défaut : false). */
-    private Boolean warehouseEnabled;
 }

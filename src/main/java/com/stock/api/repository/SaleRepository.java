@@ -35,13 +35,6 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
      *  est interprété par Spring Data comme « Top » → limite de 1). */
     List<Sale> findByStatusOrderByCreatedAtDesc(SaleStatus status, Pageable pageable);
 
-    /** Boutiques : agrégats de vente d'un entrepôt (statistiques locales). */
-    long countByWarehouseId(Long warehouseId);
-
-    @Query("SELECT COALESCE(SUM(s.totalAmount), 0) FROM Sale s " +
-           "WHERE s.warehouse.id = :warehouseId AND s.status = 'COMPLETED'")
-    BigDecimal sumTotalByWarehouseId(@Param("warehouseId") Long warehouseId);
-
     long countBySellerId(Long sellerId);
 
     /** Demandes d'annulation en attente (traitées par l'administration). */

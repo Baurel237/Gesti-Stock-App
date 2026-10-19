@@ -17,7 +17,6 @@ public class CompanyResponse {
     private String name;
     private String slug;
     private boolean active;
-    private boolean warehouseEnabled;
     private long userCount;
     private LocalDateTime createdAt;
 }

@@ -50,12 +50,6 @@ class ProductServiceTest {
     @Mock
     private SupplierRepository supplierRepository;
 
-    @Mock
-    private com.stock.api.repository.UserRepository userRepository;
-
-    @Mock
-    private WarehouseScopeService warehouseScopeService;
-
     @InjectMocks
     private ProductService productService;
 

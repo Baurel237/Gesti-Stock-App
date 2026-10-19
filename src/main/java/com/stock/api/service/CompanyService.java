@@ -50,7 +50,6 @@ public class CompanyService {
                 .name(request.getName().trim())
                 .slug(slug)
                 .active(true)
-                .warehouseEnabled(Boolean.TRUE.equals(request.getWarehouseEnabled()))
                 .build());
 
         auditService.recordFor(currentUserEmail(), "SUPER_ADMIN", "CREATE", "Company",
@@ -99,7 +98,6 @@ public class CompanyService {
                 .name(company.getName())
                 .slug(company.getSlug())
                 .active(company.isActive())
-                .warehouseEnabled(company.isWarehouseEnabled())
                 .userCount(userCount)
                 .createdAt(company.getCreatedAt())
                 .build();

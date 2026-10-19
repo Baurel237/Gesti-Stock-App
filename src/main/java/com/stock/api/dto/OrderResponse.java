@@ -32,10 +32,6 @@ public class OrderResponse {
     private String clientName;
     private LocalDate deliveryDate;
 
-    /** Entrepôt / boutique d'origine (V11) — servi sur le ticket. */
-    private Long warehouseId;
-    private String warehouseName;
-    private String warehouseLocation;
     private String notes;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

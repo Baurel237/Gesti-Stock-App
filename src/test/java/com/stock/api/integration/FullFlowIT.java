@@ -1,7 +1,11 @@
 package com.stock.api.integration;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stock.api.config.PostgresContainerConfig;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.Statement;
 import com.stock.api.dto.*;
 import com.stock.api.entity.StockMovement.MovementType;
 import org.junit.jupiter.api.*;
@@ -14,6 +18,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.hamcrest.Matchers.*;
@@ -103,12 +108,14 @@ class FullFlowIT extends PostgresContainerConfig {
         if (authToken != null) {
             return;
         }
+        // Le compte superadmin peut exister (seed demo) ou devoir être créé
+        // (base de test vierge). On tente la connexion, sinon on le crée.
         LoginRequest request = LoginRequest.builder()
                 .email("superadmin@stock.com")
                 .password("superadmin")
                 .build();
 
-        MvcResult result = mockMvc.perform(post("/api/auth/login")
+        MvcResult loginResult = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -117,7 +124,7 @@ class FullFlowIT extends PostgresContainerConfig {
                 .andReturn();
 
         AuthResponse response = objectMapper.readValue(
-                result.getResponse().getContentAsString(), AuthResponse.class);
+                loginResult.getResponse().getContentAsString(), AuthResponse.class);
         authToken = response.getToken();
     }
 
@@ -126,21 +133,43 @@ class FullFlowIT extends PostgresContainerConfig {
         if (categoryId != null) {
             return;
         }
+        // Recherche si la catégorie existe déjà (créée par un run précédent),
+        // sinon on la crée. Idempotente sur un état de base qui peut varier.
+        MvcResult searchResult = mockMvc.perform(get("/api/categories")
+                        .header("Authorization", "Bearer " + authToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        String json = searchResult.getResponse().getContentAsString();
+        // La liste est une Page : { content: [ { id, name, ... } ], ... }.
+        // On cherche la categorie "Electronique" uniquement dans content[].
+        JsonNode jsonNode = objectMapper.readTree(json);
+        JsonNode content = jsonNode.path("content");
+        if (content.isArray() && content.size() > 0) {
+            for (JsonNode categoryNode : content) {
+                if ("\u00c9lectronique".equals(categoryNode.path("name").asText())) {
+                    categoryId = categoryNode.path("id").asLong();
+                    return;
+                }
+            }
+            // Une categorie existe deja mais pas "Electronique" : on la garde.
+            categoryId = content.get(0).path("id").asLong();
+            return;
+        }
         CategoryRequest request = CategoryRequest.builder()
                 .name("Électronique")
                 .description("Appareils électroniques")
                 .build();
 
-        MvcResult result = mockMvc.perform(post("/api/categories")
+        MvcResult createResult = mockMvc.perform(post("/api/categories")
                         .header("Authorization", "Bearer " + authToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andReturn();
 
-        CategoryResponse response = objectMapper.readValue(
-                result.getResponse().getContentAsString(), CategoryResponse.class);
-        categoryId = response.getId();
+        JsonNode categoryResponse = objectMapper.readTree(
+                createResult.getResponse().getContentAsString());
+        categoryId = categoryResponse.path("id").asLong();
     }
 
     private void ensureProduct() throws Exception {
@@ -765,4 +794,5 @@ class FullFlowIT extends PostgresContainerConfig {
                     .andExpect(jsonPath("$.items[0].quantity").value(2));
         }
     }
+
 }

@@ -15,12 +15,6 @@ import lombok.NoArgsConstructor;
 public class StockMovementRequest {
 
     /**
-     * Entrepôt concerné (OPTIONNEL — module entrepôts activé). Null en mode
-     * stock simple : l'opération touche uniquement la quantité globale produit.
-     */
-    private Long warehouseId;
-
-    /**
      * Fournisseur du réapprovisionnement (OPTIONNEL, story 2.2) — réservé
      * aux entrées (ENTRY) ; doit appartenir à l'entreprise du token.
      */

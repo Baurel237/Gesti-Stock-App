@@ -54,15 +54,6 @@ public class Order {
     private String clientName;
 
     /**
-     * Entrepôt / boutique d'origine de la commande (V11).
-     * Pour un vendeur affecté à un entrepôt : résolu automatiquement à la création.
-     * Servi sur le ticket de commande.
-     */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "warehouse_id")
-    private Warehouse warehouse;
-
-    /**
      * Date de livraison souhaitée d'une commande CLIENT.
      */
     @Column

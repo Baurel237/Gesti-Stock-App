@@ -41,11 +41,4 @@ public class CreateUserRequest {
 
     /** RG-05 : au moins un rôle doit être fourni. */
     private Set<String> roles;
-
-    /**
-     * « 1 entrepôt = 1 boutique » : entrepôts affectés dès la création
-     * (meilleure pratique — évite un compte boutique sans affectation).
-     * Facultatif : peut être fixé ensuite via l'écran d'affectation.
-     */
-    private Set<Long> warehouseIds;
 }

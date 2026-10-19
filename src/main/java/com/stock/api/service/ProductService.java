@@ -10,7 +10,6 @@ import com.stock.api.exception.BusinessRuleException;
 import com.stock.api.repository.CategoryRepository;
 import com.stock.api.repository.ProductRepository;
 import com.stock.api.repository.SupplierRepository;
-import com.stock.api.repository.UserRepository;
 import com.stock.api.tenant.TenantContext;
 import com.stock.api.tenant.TenantGuard;
 import lombok.RequiredArgsConstructor;
@@ -36,52 +35,20 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final SupplierRepository supplierRepository;
-    private final WarehouseScopeService warehouseScopeService;
-    private final UserRepository userRepository;
 
     /**
      * US-06 : Liste paginée des produits actifs avec filtres.
      * V2 : tout utilisateur non-plateforme ne voit que les produits de son entreprise.
      * Story 2.4 : filtre facultatif par fournisseur — un fournisseur inconnu,
      * supprimé ou d'une autre société est refusé (aucune fuite de données).
-     * « 1 entrepôt = 1 boutique » : un utilisateur non-Direction Générale avec
-     * une boutique désignée ne voit que les produits stockés dans celle-ci.
      */
     @Transactional(readOnly = true)
     public Page<ProductResponse> findAll(Long categoryId, String name, Long supplierId, Pageable pageable) {
         Long checkedSupplierId = validateSupplierFilter(supplierId);
         Long companyId = TenantContext.getCompanyId();
-        Long warehouseId = scopeWarehouseId(companyId);
-        Page<Product> page;
-        if (warehouseId != null) {
-            page = productRepository.findByFiltersForWarehouse(
-                    companyId, categoryId, checkedSupplierId, name, warehouseId, pageable);
-        } else {
-            page = productRepository.findByFilters(companyId, categoryId, checkedSupplierId, name, pageable);
-        }
-        return page.map(this::toResponse);
-    }
-
-    /**
-     * Boutique désignée de l'utilisateur courant (périmètre strict), sinon
-     * null (vue Direction Générale — ADMIN/portée plateforme).
-     *
-     * Un profil non-DG sans affectation n'obtient PAS de filtrage ici mais
-     * doit être traité comme « aucun accès » : c'est géré en amont par la
-     * réglementation des rôle et en aval par la vérification d'entrepôt sur
-     * les opérations. Ici : filtrer uniquement si une seule boutique est
-     * désignée (affectation unique ou implicite).
-     */
-    private Long scopeWarehouseId(Long companyId) {
-        if (companyId == null) {
-            return null;
-        }
-        User current = CurrentUserHolder.currentUser(userRepository);
-        if (warehouseScopeService.isGlobalViewer(current)) {
-            return null;
-        }
-        var allowed = warehouseScopeService.allowedWarehouses(companyId);
-        return allowed.size() == 1 ? allowed.get(0).getId() : null;
+        return productRepository
+                .findByFilters(companyId, categoryId, checkedSupplierId, name, pageable)
+                .map(this::toResponse);
     }
 
     /** Story 2.4 : le fournisseur du filtre doit exister, être actif et

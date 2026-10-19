@@ -169,9 +169,7 @@ public class DataInitializer implements CommandLineRunner {
                 .orElseGet(() -> {
                     Company created = companyRepository.save(Company.builder()
                             .name("Démo")
-                            .slug("demo")
-                            .active(true)
-                            .warehouseEnabled(false)
+                            .slug("demo")                            .active(true)
                             .build());
                     log.info("Entreprise de démonstration créée : {} (slug: {})", created.getName(), created.getSlug());
                     return created;

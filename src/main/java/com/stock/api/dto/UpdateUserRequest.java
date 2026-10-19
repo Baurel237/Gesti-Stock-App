@@ -24,11 +24,4 @@ public class UpdateUserRequest {
     private Set<String> roles;
 
     private Boolean active;
-
-    /**
-     * Entrepôts affectés (story 1.1) — IDs d'entrepôts de l'entreprise.
-     * null = inchangé ; liste vide = retrait de toutes les affectations
-     * (l'utilisateur redevient sans restriction).
-     */
-    private Set<Long> warehouseIds;
 }

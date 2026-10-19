@@ -17,10 +17,6 @@ import com.stock.api.repository.SaleEditRequestRepository;
 import com.stock.api.repository.SaleRepository;
 import com.stock.api.repository.StockMovementRepository;
 import com.stock.api.repository.UserRepository;
-import com.stock.api.repository.WarehouseRepository;
-import com.stock.api.repository.WarehouseStockRepository;
-import com.stock.api.entity.Warehouse;
-import com.stock.api.entity.WarehouseStock;
 import com.stock.api.tenant.TenantContext;
 import com.stock.api.tenant.TenantGuard;
 import lombok.RequiredArgsConstructor;
@@ -55,9 +51,6 @@ public class SaleService {
     private final StockMovementRepository stockMovementRepository;
     private final SaleEditRequestRepository saleEditRequestRepository;
     private final AuditService auditService;
-    private final WarehouseRepository warehouseRepository;
-    private final WarehouseStockRepository warehouseStockRepository;
-    private final WarehouseScopeService warehouseScopeService;
 
     /** Rôles pouvant consulter les ventes de tous les vendeurs. */
     private static final Set<Role> SUPERVISOR_ROLES = Set.of(Role.SUPER_ADMIN, Role.ADMIN, Role.WAREHOUSE_ADMIN, Role.MANAGER);
@@ -77,22 +70,10 @@ public class SaleService {
         Long companyId = seller.getCompany() != null ? seller.getCompany().getId() : null;
         TenantGuard.assertSameCompany(companyId);
 
-        // Entrepôt OPTIONNEL : fourni seulement si le module est activé pour
-        // l'entreprise ; en mode stock simple, warehouse = null (comportement V1).
-        Warehouse warehouse = resolveWarehouse(request.getWarehouseId(), companyId);
-
-        // « 1 entrepôt = 1 boutique » : un utilisateur non-Direction Générale
-        // vend uniquement depuis son périmètre (boutique désignée). Sans
-        // périmètre, aucune vente n'est possible quand le module est actif.
-        if (warehouse != null) {
-            warehouseScopeService.assertWarehouseAllowed(warehouse);
-        }
-
         Sale sale = Sale.builder()
                 .reference("VTE-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase())
                 .seller(seller)
                 .companyId(companyId)
-                .warehouse(warehouse)
                 .status(SaleStatus.COMPLETED)
                 .paymentMethod(request.getPaymentMethod() != null ? request.getPaymentMethod() : Sale.PaymentMethod.CASH)
                 .buyerName(trimOrNull(request.getBuyerName()))
@@ -111,20 +92,7 @@ public class SaleService {
                     "Produit supprimé : " + product.getName() + " (réf. " + product.getReference() + ").");
             }
 
-            if (warehouse != null) {
-                // Mode entrepôts : décrémenter le stock de l'entrepôt sélectionné
-                WarehouseStock stock = warehouseStockRepository
-                        .findByProductIdAndWarehouseId(product.getId(), warehouse.getId())
-                        .orElseThrow(() -> new BusinessRuleException(
-                                String.format("« %s » n'est pas stocké dans l'entrepôt sélectionné.", product.getName())));
-                if (!stock.canRemove(itemRequest.getQuantity())) {
-                    throw new BusinessRuleException(
-                            String.format("Stock insuffisant pour « %s » dans l'entrepôt « %s ». "
-                                    + "Disponible : %d, demandé : %d.",
-                                    product.getName(), warehouse.getName(),
-                                    stock.getQuantity(), itemRequest.getQuantity()));
-                }
-            } else if (!product.canRemoveQuantity(itemRequest.getQuantity())) {
+            if (!product.canRemoveQuantity(itemRequest.getQuantity())) {
                 throw new BusinessRuleException(
                     String.format("Stock insuffisant pour « %s » (réf. %s). "
                         + "Disponible : %d unités, demandé : %d unités.",
@@ -143,13 +111,7 @@ public class SaleService {
 
             sale.addItem(item);
 
-            // Décrémenter le stock (entrepôt si module actif, sinon stock simple)
-            if (warehouse != null) {
-                WarehouseStock stock = warehouseStockRepository
-                        .findByProductIdAndWarehouseId(product.getId(), warehouse.getId()).orElseThrow();
-                stock.setQuantity(stock.getQuantity() - itemRequest.getQuantity());
-                warehouseStockRepository.save(stock);
-            }
+            // Décrémenter le stock
             product.removeQuantity(itemRequest.getQuantity());
             productRepository.save(product);
 
@@ -161,7 +123,6 @@ public class SaleService {
                     .reason("Vente " + sale.getReference())
                     .performedBy(seller)
                     .companyId(companyId)
-                    .warehouse(warehouse)
                     .build());
         }
 
@@ -537,16 +498,8 @@ public class SaleService {
     /** Remet en stock les quantités vendues et trace les mouvements ENTRY. */
     private void restockSale(Sale sale) {
         User performer = sale.getSeller();
-        Warehouse warehouse = sale.getWarehouse();
         for (SaleItem item : sale.getItems()) {
             Product product = item.getProduct();
-            if (warehouse != null) {
-                warehouseStockRepository.findByProductIdAndWarehouseId(product.getId(), warehouse.getId())
-                        .ifPresent(stock -> {
-                            stock.setQuantity(stock.getQuantity() + item.getQuantity());
-                            warehouseStockRepository.save(stock);
-                        });
-            }
             product.addQuantity(item.getQuantity());
             productRepository.save(product);
             stockMovementRepository.save(StockMovement.builder()
@@ -556,7 +509,6 @@ public class SaleService {
                     .reason("Annulation vente " + sale.getReference())
                     .performedBy(performer)
                     .companyId(sale.getCompanyId())
-                    .warehouse(warehouse)
                     .build());
         }
     }
@@ -698,20 +650,6 @@ public class SaleService {
                 .total((BigDecimal) row[2])
                 .build()
         ).toList();
-    }
-
-    /**
-     * Entrepôt concerné par une opération : null en mode stock simple ;
-     * en mode entrepôts, il doit appartenir à l'entreprise du token.
-     */
-    private Warehouse resolveWarehouse(Long warehouseId, Long companyId) {
-        if (warehouseId == null) {
-            return null;
-        }
-        Warehouse warehouse = warehouseRepository.findById(warehouseId)
-                .orElseThrow(() -> new BusinessRuleException("Entrepôt non trouvé : " + warehouseId));
-        TenantGuard.assertSameCompany(warehouse.getCompany().getId());
-        return warehouse.isActive() ? warehouse : null;
     }
 
     private boolean isSupervisor(User user) {

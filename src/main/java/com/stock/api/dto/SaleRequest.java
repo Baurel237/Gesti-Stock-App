@@ -27,9 +27,4 @@ public class SaleRequest {
     /** Téléphone de l'acheteur (facultatif). */
     private String buyerPhone;
 
-    /**
-     * Entrepôt de décrémentation (OPTIONNEL, module entrepôts activé).
-     * Absent ou null en mode stock simple — la vente n'y touche pas.
-     */
-    private Long warehouseId;
 }
