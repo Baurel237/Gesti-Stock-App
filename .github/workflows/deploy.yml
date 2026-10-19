@@ -3,6 +3,11 @@ name: Deploy
 on:
   release:
     types: [ published ]
+  # Déclenchement sur tag : le job construit le JAR et l'attache à une release
+  # créée pour le tag (ex : git tag v1.1.0 && git push origin v1.1.0).
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       environment:
@@ -19,27 +24,36 @@ env:
 
 jobs:
   deploy:
-    name: 🚀 Deploy
+    name: "Deploy (${{ github.event_name }}${{ github.ref_name }})"
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment || 'staging' }}
 
     steps:
-      - name: 📥 Checkout
-        uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v5
 
-      - name: ☕ Setup Java
-        uses: actions/setup-java@v4
+      - name: "Setup Java ${{ env.JAVA_VERSION }}"
+        uses: actions/setup-java@v5
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: 🏗️ Build & Package
+      - name: Build & Package
         run: mvn clean package -DskipTests -q
 
-      - name: 📦 Upload artifact to release
+      - name: "Upload artifact — JAR stock-api"
+        uses: actions/upload-artifact@v5
+        with:
+          name: stock-api-jar
+          path: target/stock-api-*.jar
+          retention-days: 7
+
+      # Attache le JAR à la release : sur un événement `release` (déjà publiée)
+      # ou lors d'un push de tag v* (crée la release correspondante).
+      - name: Attach JAR to release
         uses: softprops/action-gh-release@v2
         with:
           files: target/stock-api-*.jar
           generate_release_notes: true
-        if: github.event_name == 'release'
+        if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
