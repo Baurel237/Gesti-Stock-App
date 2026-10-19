@@ -1,5 +1,7 @@
 # Stock API — gestion de stock centralisée
 
+[![CI/CD Pipeline](https://github.com/Baurel237/Gesti-Stock-App/actions/workflows/ci.yml/badge.svg)](https://github.com/Baurel237/Gesti-Stock-App/actions/workflows/ci.yml)
+
 Backend Spring Boot 3.4 / Java 21 / PostgreSQL (migrations Flyway) pour la
 gestion de stock **multi-entreprises**, avec stock **centralisé**.
 
@@ -139,6 +141,46 @@ Le schéma est géré intégralement par Flyway (`src/main/resources/db/migratio
 V1 initialisation, V2–V12 évolutions, **V13 suppression du module entrepôts**.
 La migration est appliquée automatiquement au démarrage ; elle est idempotente
 et ne supprime aucune donnée métier (ventes, mouvements, commandes, produits).
+
+### Notes de migration — V13 (suppression du module entrepôts)
+
+**Avant** : stock réparti par entrepôt (module optionnel activable par
+entreprise via `warehouse_enabled`).
+
+**Après** : un seul stock central — `products.quantity` est la seule source
+de vérité ; ventes, mouvements et commandes fonctionnent sans sélection
+d'entrepôt.
+
+| Élément supprimé | Action V13 |
+|---|---|
+| Table `warehouses` | `DROP TABLE ... CASCADE` |
+| Table `user_warehouses` (affectations utilisateurs) | `DROP TABLE ... CASCADE` |
+| Table `product_stock_per_warehouse` (stock par entrepôt) | `DROP TABLE ... CASCADE` |
+| Colonne `stock_movements.warehouse_id` (+ FK, index) | `DROP COLUMN` |
+| Colonne `sales.warehouse_id` (+ FK) | `DROP COLUMN` |
+| Colonne `orders.warehouse_id` (+ FK, index) | `DROP COLUMN` |
+| Colonne `companies.warehouse_enabled` | `DROP COLUMN` |
+
+**Garanties** :
+- idempotente (tests `IF EXISTS`, do-blocks) — exécutable sur un schéma
+  Hibernate (`ddl-auto=update` ancien) comme sur un schéma Flyway ;
+- les quantités réelles vivaient déjà dans `products.quantity` (décrémentées
+  par les ventes/mouvements), aucune donnée métier n'est retravaillée ;
+- le rôle `WAREHOUSE_ADMIN` reste valide (il détient les droits du niveau
+  `MANAGER`) ; aucun compte n'est cassé.
+
+**Déploiement** : la migration s'applique seule au démarrage de l'API
+(Flyway `baseline-on-migrate` déjà posé en prod). Vérifier après coup :
+
+```sql
+SELECT count(*) FROM pg_tables
+WHERE tablename IN ('warehouses','user_warehouses','product_stock_per_warehouse');
+-- attendu : 0
+```
+
+**Rollback** : non prévu — V13 ne supprime que des structures désormais
+inutilisées ; pour revenir en arrière il faudrait réinjecter le code antérieur
+et recréer les tables (aucun aller-retour automatique fourni).
 
 ## Structure du projet
 
